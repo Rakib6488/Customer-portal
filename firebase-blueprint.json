@@ -1,0 +1,44 @@
+{
+  "entities": {
+    "session": {
+      "title": "Live Agent Session",
+      "description": "Represents a real-time logged-in agent session",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "loginTime": { "type": "string", "format": "date-time" },
+        "status": { "type": "string", "enum": ["offline", "available", "on_break"] },
+        "currentActivity": { "type": "string" },
+        "lastActive": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "name", "loginTime", "status", "currentActivity", "lastActive"]
+    },
+    "break": {
+      "title": "Live Break",
+      "description": "Represents a real-time shared break event",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "agentId": { "type": "string" },
+        "agentName": { "type": "string" },
+        "startTime": { "type": "string", "format": "date-time" },
+        "endTime": { "type": "string", "format": "date-time" },
+        "reason": { "type": "string" },
+        "duration": { "type": "integer" },
+        "status": { "type": "string", "enum": ["active", "completed"] }
+      },
+      "required": ["id", "agentId", "agentName", "startTime", "reason", "status"]
+    }
+  },
+  "firestore": {
+    "/agent_sessions/{sessionId}": {
+      "schema": "session",
+      "description": "Collection of currently active agent login sessions"
+    },
+    "/breaks/{breakId}": {
+      "schema": "break",
+      "description": "Collection of live and historical break activities"
+    }
+  }
+}

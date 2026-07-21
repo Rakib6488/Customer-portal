@@ -1,0 +1,100 @@
+:root {
+  /* DARK THEME (Default) - Premium Enterprise Deep Slate & Obsidian Theme */
+  --theme-bg-app: #080c14;       /* Deep obsidian midnight base */
+  --theme-bg-card: #0f172a;      /* Clean slate obsidian card background */
+  --theme-border-card: rgba(30, 41, 59, 0.7); /* Subtle border matching dark theme */
+  --theme-border-card-solid: #1e293b; /* Crisp dark slate border */
+  --theme-text-main: #f1f5f9;    /* Crisp light-gray Slate-100 text */
+  --theme-text-muted: #94a3b8;   /* Soft Slate-400 muted text */
+  --theme-text-muted-darker: #64748b; /* Slate-500 muted text */
+  --theme-bg-hover: #1e293b;     /* Soft dark highlight on hover */
+  
+  --theme-accent-gold: #6366f1;  /* Elegant Indigo-500 accent */
+  --theme-accent-gold-hover: #4f46e5; /* Elegant Indigo-600 hover */
+}
+
+.light {
+  /* LIGHT THEME - Professional enterprise off-whites & slate base */
+  --theme-bg-app: #f8fafc;       /* Off-white background (Slate-50) */
+  --theme-bg-card: #ffffff;      /* Pure white card backgrounds */
+  --theme-border-card: #e2e8f0;  /* Soft slate-200 border */
+  --theme-border-card-solid: #cbd5e1; /* Slate-300 border */
+  --theme-text-main: #0f172a;    /* Deep Slate-900 charcoal text */
+  --theme-text-muted: #475569;   /* Slate-600 muted text */
+  --theme-text-muted-darker: #64748b; /* Slate-500 muted text */
+  --theme-bg-hover: #f1f5f9;     /* Soft Slate-100 hover highlight */
+  
+  --theme-accent-gold: #4f46e5;  /* Elegant Indigo-600 accent */
+  --theme-accent-gold-hover: #3730a3; /* Indigo-850 hover accent */
+}
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-serif: "Georgia", ui-serif, serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+  
+  --color-bg-dark: var(--theme-bg-app);
+  --color-surface-dark: var(--theme-bg-card);
+  --color-accent-gold: var(--theme-accent-gold);
+  --color-accent-gold-hover: var(--theme-accent-gold-hover);
+
+  /* Map zinc variables dynamically so that all App.tsx components adapt seamlessly */
+  --color-zinc-950: var(--theme-bg-app);
+  --color-zinc-900: var(--theme-bg-card);
+  --color-zinc-850: var(--theme-bg-hover);
+  --color-zinc-800: var(--theme-border-card);
+  --color-zinc-750: var(--theme-border-card-solid);
+  --color-zinc-700: var(--theme-border-card-solid);
+  
+  --color-zinc-600: var(--theme-text-muted-darker);
+  --color-zinc-500: var(--theme-text-muted);
+  --color-zinc-400: var(--theme-text-muted);
+  --color-zinc-350: var(--theme-text-muted);
+  --color-zinc-300: var(--theme-text-main);
+  --color-zinc-200: var(--theme-text-main);
+  --color-zinc-100: var(--theme-text-main);
+}
+
+body {
+  background-color: var(--theme-bg-app);
+  color: var(--theme-text-main);
+  font-family: var(--font-sans);
+  transition: background-color 0.25s ease, color 0.25s ease, border-color 0.25s ease;
+}
+
+/* Beautiful custom scrollbars matching active theme */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: var(--theme-bg-app);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--theme-border-card-solid);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--theme-text-muted-darker);
+}
+
+@keyframes flash-red {
+  0%, 100% {
+    background-color: rgba(127, 29, 29, 0.25);
+    border-color: rgba(239, 68, 68, 0.45);
+    box-shadow: 0 0 2px rgba(239, 68, 68, 0.1);
+  }
+  50% {
+    background-color: rgba(153, 27, 27, 0.65);
+    border-color: rgba(248, 113, 113, 0.9);
+    box-shadow: 0 0 12px rgba(239, 68, 68, 0.4);
+  }
+}
+
+.animate-flash-red {
+  animation: flash-red 1.5s infinite ease-in-out;
+}
+
