@@ -1,9 +1,21 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+
+    // ---------- Auth helpers ----------
+
     function isSignedIn() {
       return request.auth != null;
     }
+
+    // Requires a custom claim `admin: true` set via the Firebase Admin SDK
+    // (e.g. admin.auth().setCustomUserClaims(uid, { admin: true })).
+    // Anonymous / unclaimed users will never satisfy this.
+    function isAdmin() {
+      return isSignedIn() && request.auth.token.admin == true;
+    }
+
+    // ---------- Generic validators ----------
 
     function isValidId(id) {
       return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[A-Za-z0-9_-]+$');
@@ -13,7 +25,11 @@ service cloud.firestore {
       return value is string && value.size() > 0 && value.size() <= maxLength;
     }
 
+    function isOptionalStringWithin(data, field, maxLength) {
+      return !(field in data) || isStringWithin(data[field], maxLength);
+    }
 
+    // ---------- Collection-specific validators ----------
 
     function isValidSession(data) {
       return data.keys().hasOnly(['id', 'name', 'loginTime', 'status', 'currentActivity', 'lastActive', 'shiftTimer', 'breakTimer', 'agentId'])
@@ -27,7 +43,7 @@ service cloud.firestore {
         && isStringWithin(data.lastActive, 50)
         && (!('shiftTimer' in data) || data.shiftTimer is int)
         && (!('breakTimer' in data) || data.breakTimer is int)
-        && (!('agentId' in data) || isStringWithin(data.agentId, 128));
+        && isOptionalStringWithin(data, 'agentId', 128);
     }
 
     function isValidBreak(data) {
@@ -37,7 +53,7 @@ service cloud.firestore {
         && isStringWithin(data.agentId, 128)
         && isStringWithin(data.agentName, 100)
         && isStringWithin(data.startTime, 50)
-        && (!('endTime' in data) || isStringWithin(data.endTime, 50))
+        && isOptionalStringWithin(data, 'endTime', 50)
         && isStringWithin(data.reason, 200)
         && data.status is string
         && (data.status == 'active' || data.status == 'completed')
@@ -59,12 +75,22 @@ service cloud.firestore {
         && data.autoClockIn is bool
         && data.audioNotifications is bool
         && isStringWithin(data.defaultBreakReason, 50)
-        && data.compactSidebar is bool
-        && data.showWarnings is bool
         && data.customAlias is string
         && data.customAlias.size() <= 100
+        && data.compactSidebar is bool
+        && data.showWarnings is bool
         && isStringWithin(data.updatedAt, 50);
     }
+
+    // Generic shape check for the reportable-record collections. Tighten
+    // per-collection with dedicated validators as their schemas solidify.
+    function isValidRecord(data) {
+      return data.size() <= 40
+        && ('id' in data ? isStringWithin(data.id, 128) : true)
+        && ('updatedAt' in data ? isStringWithin(data.updatedAt, 50) : true);
+    }
+
+    // ---------- Live session / roster collections ----------
 
     match /agent_sessions/{sessionId} {
       allow read: if isSignedIn();
@@ -73,7 +99,7 @@ service cloud.firestore {
         && sessionId == request.auth.uid
         && isValidSession(request.resource.data)
         && request.resource.data.id == request.auth.uid;
-      allow delete: if isSignedIn() && sessionId == request.auth.uid;
+      allow delete: if isSignedIn() && (sessionId == request.auth.uid || isAdmin());
     }
 
     match /agents/{agentId} {
@@ -82,8 +108,9 @@ service cloud.firestore {
         && isValidId(agentId)
         && isValidSession(request.resource.data)
         && request.resource.data.id == agentId
-        && request.resource.data.agentId == agentId;
-      allow delete: if isSignedIn() && agentId == resource.data.agentId;
+        && request.resource.data.agentId == agentId
+        && (agentId == request.auth.uid || isAdmin());
+      allow delete: if isSignedIn() && (agentId == resource.data.agentId || isAdmin());
     }
 
     match /breaks/{breakId} {
@@ -92,7 +119,7 @@ service cloud.firestore {
         && isValidId(breakId)
         && isValidBreak(request.resource.data)
         && request.resource.data.id == breakId;
-      allow delete: if isSignedIn();
+      allow delete: if isSignedIn() && (request.auth.uid == resource.data.agentId || isAdmin());
     }
 
     match /activeBreaks/{agentId} {
@@ -103,24 +130,40 @@ service cloud.firestore {
         && request.resource.data.id == agentId
         && request.resource.data.agentId == agentId
         && request.resource.data.status == 'active';
-      allow delete: if isSignedIn();
+      allow delete: if isSignedIn() && (agentId == request.auth.uid || isAdmin());
     }
 
-    // Authenticated users can persist reportable portal records.
+    // ---------- Sensitive collection: locked to admins ----------
+    // Credentials should ideally not live in Firestore at all — prefer
+    // Firebase Auth (email/password, custom tokens) so passwords never
+    // sit in a client-readable database. Until that migration happens,
+    // this collection is admin-only in both directions.
+    match /agent_credentials/{docId} {
+      allow read, write: if isAdmin();
+    }
+
+    // ---------- General authenticated collections ----------
     match /{collectionName}/{documentId} {
       allow read, write: if isSignedIn()
-        && collectionName in ['contacts', 'tickets', 'kb_articles', 'activities', 'shift_logs', 'roster_days', 'agent_credentials'];
+        && collectionName in ['contacts', 'tickets', 'kb_articles', 'activities', 'shift_logs', 'roster_days']
+        && isValidId(documentId)
+        && (request.method == 'read' || isValidRecord(request.resource.data));
     }
 
+    // ---------- Config ----------
     match /config/{configId} {
       allow read: if isSignedIn();
       allow create, update: if isSignedIn() && (
-        (configId == 'spreadsheet' && isValidSpreadsheetConfig(request.resource.data)) ||
-        (configId.matches('^preferences_[A-Za-z0-9_-]{1,128}$') && isValidPersonalPreferences(request.resource.data))
+        (configId == 'spreadsheet' && isAdmin() && isValidSpreadsheetConfig(request.resource.data)) ||
+        (configId.matches('^preferences_[A-Za-z0-9_-]{1,128}$')
+          && configId == 'preferences_' + request.auth.uid
+          && isValidPersonalPreferences(request.resource.data))
       );
+    }
+
+    // Deny everything else by default (implicit, but explicit for clarity).
+    match /{document=**} {
+      allow read, write: if false;
     }
   }
 }
-
-
-
