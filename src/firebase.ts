@@ -276,6 +276,36 @@ export const listenToBreaks = (onUpdate: (breaks: any[]) => void) => {
   );
 };
 
+// Generic cloud persistence helpers for all reportable portal data.
+export const upsertCloudRecord = async (collectionName: string, recordId: string, data: Record<string, unknown>) => {
+  if (!isFirebaseEnabled || !auth.currentUser || !db) return;
+  const path = `${collectionName}/${recordId}`;
+  try {
+    await setDoc(doc(db, collectionName, recordId), { ...data, id: recordId });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, path);
+  }
+};
+
+export const listenToCloudCollection = <T extends Record<string, unknown>>(
+  collectionName: string,
+  onUpdate: (records: T[]) => void
+) => {
+  if (!isFirebaseEnabled || !db) {
+    onUpdate([]);
+    return () => undefined;
+  }
+
+  return onSnapshot(
+    collection(db, collectionName),
+    (snapshot) => {
+      onUpdate(snapshot.docs.map((item) => item.data() as T));
+    },
+    (error) => {
+      console.warn(`Firestore ${collectionName} subscription info:`, error.message);
+    }
+  );
+};
 // Global spreadsheet config helpers
 export const saveSpreadsheetConfig = async (spreadsheetId: string, spreadsheetUrl: string) => {
   if (!isFirebaseEnabled || !auth.currentUser || !db) return;

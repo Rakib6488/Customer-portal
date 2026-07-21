@@ -106,6 +106,12 @@ service cloud.firestore {
       allow delete: if isSignedIn();
     }
 
+    // Authenticated users can persist reportable portal records.
+    match /{collectionName}/{documentId} {
+      allow read, write: if isSignedIn()
+        && collectionName in ['contacts', 'tickets', 'kb_articles', 'activities', 'shift_logs', 'roster_days'];
+    }
+
     match /config/{configId} {
       allow read: if isSignedIn();
       allow create, update: if isSignedIn() && (

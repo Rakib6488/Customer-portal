@@ -35,6 +35,8 @@ import {
   listenToSessions,
   upsertBreak,
   listenToBreaks,
+  upsertCloudRecord,
+  listenToCloudCollection,
   signInAnonymouslyIfNeeded,
   saveSpreadsheetConfig,
   listenToSpreadsheetConfig,
@@ -890,6 +892,14 @@ export default function App() {
     return 0;
   };
 
+  const saveShiftLog = async (shiftId: string, data: Record<string, unknown>) => {
+    if (!isPortalLoggedIn || !user) return;
+    await upsertCloudRecord('shift_logs', shiftId, {
+      agentId: currentUser?.id || localStorage.getItem('csp_logged_in_agent_id') || 'agent01',
+      agentName: agentName || currentUser?.name || 'System Agent',
+      ...data,
+    });
+  };
   const handleHeaderCheckIn = async () => {
     const startStr = new Date().toISOString();
     setIsCheckedIn(true);
@@ -911,6 +921,10 @@ export default function App() {
     localStorage.setItem(`csp_${aid}_shift_start_timestamp`, String(Date.now()));
     localStorage.setItem(`csp_${aid}_accumulated_before`, String(currentShiftTime));
     setShiftTimer(currentShiftTime);
+
+    const shiftLogId = `${aid}_${Date.now()}`;
+    localStorage.setItem(`csp_${aid}_active_shift_log_id`, shiftLogId);
+    await saveShiftLog(shiftLogId, { clockIn: startStr, clockOut: null, duration: currentShiftTime, status: 'active' });
 
     logActivity(`Agent "${agentName}" checked in and clocked duty shift on.`);
     await upsertSessionToFirebase('available', 'available', currentShiftTime);
@@ -934,6 +948,11 @@ export default function App() {
       }
       localStorage.setItem(`csp_${aid}_timer_shift`, String(finalShift));
       localStorage.setItem(`csp_${aid}_accumulated_before`, String(finalShift));
+      const shiftLogId = localStorage.getItem(`csp_${aid}_active_shift_log_id`);
+      if (shiftLogId) {
+        await saveShiftLog(shiftLogId, { clockOut: new Date().toISOString(), duration: finalShift, status: 'completed' });
+        localStorage.removeItem(`csp_${aid}_active_shift_log_id`);
+      }
       localStorage.removeItem(`csp_${aid}_shift_start_timestamp`);
       setShiftTimer(finalShift);
 
@@ -993,6 +1012,45 @@ export default function App() {
     localStorage.setItem('csp_kb_articles', JSON.stringify(kbArticles));
   }, [kbArticles, isDataHydrated]);
 
+  // Cloud-backed report data. localStorage remains a cache, while Firestore is canonical.
+  const [cloudDataReady, setCloudDataReady] = useState(false);
+
+  useEffect(() => {
+    if (!isPortalLoggedIn || !user || !isDataHydrated) return;
+    let readyCount = 0;
+    const markReady = () => {
+      readyCount += 1;
+      if (readyCount === 3) setCloudDataReady(true);
+    };
+    const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+    const unsubContacts = listenToCloudCollection<any>('contacts', (records) => {
+      if (records.length && !same(records, contacts)) setContacts(records as CRMContact[]);
+      markReady();
+    });
+    const unsubTickets = listenToCloudCollection<any>('tickets', (records) => {
+      if (records.length && !same(records, tickets)) setTickets(records as SupportTicket[]);
+      markReady();
+    });
+    const unsubKb = listenToCloudCollection<any>('kb_articles', (records) => {
+      if (records.length && !same(records, kbArticles)) setKbArticles(records as KBArticle[]);
+      markReady();
+    });
+    return () => {
+      unsubContacts();
+      unsubTickets();
+      unsubKb();
+      setCloudDataReady(false);
+    };
+  }, [isPortalLoggedIn, user, isDataHydrated]);
+
+  useEffect(() => {
+    if (!cloudDataReady) return;
+    void Promise.all([
+      ...contacts.map((item) => upsertCloudRecord('contacts', item.id, item as unknown as Record<string, unknown>)),
+      ...tickets.map((item) => upsertCloudRecord('tickets', item.id, item as unknown as Record<string, unknown>)),
+      ...kbArticles.map((item) => upsertCloudRecord('kb_articles', item.id, item as unknown as Record<string, unknown>)),
+    ]);
+  }, [cloudDataReady, contacts, tickets, kbArticles]);
   // Roster Seed parameters
   const [currentRosterYear, setCurrentRosterYear] = useState<number>(2026);
   const [currentRosterMonth, setCurrentRosterMonth] = useState<number>(6); // July (0-indexed)
@@ -1128,6 +1186,20 @@ export default function App() {
     localStorage.setItem('csp_roster_days', JSON.stringify(rosterDays));
   }, [rosterDays]);
 
+  useEffect(() => {
+    if (!isPortalLoggedIn || !user || !isDataHydrated) return;
+    return listenToCloudCollection<any>('roster_days', (records) => {
+      if (records.length) setRosterDays(records as RosterDay[]);
+    });
+  }, [isPortalLoggedIn, user, isDataHydrated]);
+
+  useEffect(() => {
+    if (!cloudDataReady) return;
+    void Promise.all(rosterDays.map((day) =>
+      upsertCloudRecord('roster_days', day.id, day as unknown as Record<string, unknown>)
+    ));
+  }, [cloudDataReady, rosterDays]);
+
   const [connectedSpreadsheetId, setConnectedSpreadsheetId] = useState<string>(() => {
     return localStorage.getItem('csp_roster_spreadsheet_id') || '1uIWNqo9UEV2AENgJuWUPU5mprS2rha4T62eQAFTu360';
   });
@@ -1148,13 +1220,35 @@ export default function App() {
   });
 
   const logActivity = (message: string) => {
-    const newLog = { message, timestamp: new Date().toLocaleTimeString() };
+    const now = new Date();
+    const newLog = { message, timestamp: now.toLocaleTimeString() };
     setSystemLogs(prev => {
       const updated = [newLog, ...prev].slice(0, 100);
       localStorage.setItem('csp_system_logs', JSON.stringify(updated));
       return updated;
     });
+    if (isPortalLoggedIn && user) {
+      const activityId = `${currentUser?.id || 'system'}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      void upsertCloudRecord('activities', activityId, {
+        agentId: currentUser?.id || 'system',
+        agentName: agentName || currentUser?.name || 'System',
+        activity: message,
+        timestamp: now.toISOString(),
+      });
+    }
   };
+
+  useEffect(() => {
+    if (!isPortalLoggedIn || !user) return;
+    return listenToCloudCollection<any>('activities', (records) => {
+      const logs = records
+        .filter((record) => record.activity && record.timestamp)
+        .sort((a, b) => String(b.timestamp).localeCompare(String(a.timestamp)))
+        .slice(0, 100)
+        .map((record) => ({ message: String(record.activity), timestamp: new Date(String(record.timestamp)).toLocaleTimeString() }));
+      if (logs.length) setSystemLogs(logs);
+    });
+  }, [isPortalLoggedIn, user]);
 
   // Google sheet automatic roster sync when connected
   useEffect(() => {
