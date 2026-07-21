@@ -2361,17 +2361,21 @@ export default function App() {
             />
           )}
         </main>
+        </Suspense>
+      </div>
 
+      <Suspense fallback={null}>
       <AuthGatewayModal
         isOpen={isAuthGatewayOpen}
         onClose={() => setIsAuthGatewayOpen(false)}
         onSuccess={handleGoogleSignInSuccess}
         isDarkMode={isDarkMode}
       />
-        </Suspense>
+      </Suspense>
     </div>
   );
 }
+
 
 
 
