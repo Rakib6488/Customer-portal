@@ -109,7 +109,7 @@ service cloud.firestore {
     // Authenticated users can persist reportable portal records.
     match /{collectionName}/{documentId} {
       allow read, write: if isSignedIn()
-        && collectionName in ['contacts', 'tickets', 'kb_articles', 'activities', 'shift_logs', 'roster_days'];
+        && collectionName in ['contacts', 'tickets', 'kb_articles', 'activities', 'shift_logs', 'roster_days', 'agent_credentials'];
     }
 
     match /config/{configId} {

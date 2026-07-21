@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  ShieldCheck, AlertCircle, CheckCircle, Activity, FileSpreadsheet, 
+  ShieldCheck, AlertCircle, CheckCircle, Activity, Coffee, FileSpreadsheet,
   Plus, Search, Key, Trash2, ExternalLink, RefreshCw, EyeOff, Scroll, Clock,
-  Calendar, Filter, Download, ListFilter, FileText, Users
+  Calendar, Filter, Download, ListFilter, FileText, Users, Save, BookOpen, Edit
 } from 'lucide-react';
-import { AgentCredential, LiveAgentSession, CRMContact, SupportTicket, RosterDay } from '../types';
+import { AgentCredential, LiveAgentSession, CRMContact, SupportTicket, RosterDay, KBArticle } from '../types';
 import { updateAgentCredentialsInSheet, ensureSheetExists } from '../workspace';
-import { upsertSession, saveSpreadsheetConfig } from '../firebase';
+import { upsertSession, saveSpreadsheetConfig, fetchCloudCollection } from '../firebase';
 
 interface AdminSectionProps {
   token: string | null;
@@ -21,7 +21,11 @@ interface AdminSectionProps {
   liveBreaks: any[];
   contacts: CRMContact[];
   tickets: SupportTicket[];
+  kbArticles: KBArticle[];
+  setKbArticles: React.Dispatch<React.SetStateAction<KBArticle[]>>;
   rosterDays: RosterDay[];
+  setRosterDays: React.Dispatch<React.SetStateAction<RosterDay[]>>;
+  generateAutoRoster: (year: number, month: number, seed: number) => RosterDay[];
   systemLogs: { message: string; timestamp: string }[];
   logActivity: (message: string) => void;
   isBreakOverrun: (breakType: string, durationSeconds: number) => boolean;
@@ -41,7 +45,11 @@ export default function AdminSection({
   liveBreaks,
   contacts,
   tickets,
+  kbArticles,
+  setKbArticles,
   rosterDays,
+  setRosterDays,
+  generateAutoRoster,
   systemLogs,
   logActivity,
   isBreakOverrun,
@@ -61,6 +69,54 @@ export default function AdminSection({
 
   // Local notifications (toast-like) state
   const [notifications, setNotifications] = useState<string[]>([]);
+  const [monitorNow, setMonitorNow] = useState(Date.now());
+  const rosterShiftKeys = ['morning', 'standardDay', 'lateDay', 'afternoon', 'evening', 'night', 'off'] as const;
+  const [adminRosterDate, setAdminRosterDate] = useState('');
+  const [adminRosterDraft, setAdminRosterDraft] = useState<Record<string, string>>({});
+  useEffect(() => {
+    if (!adminRosterDate && rosterDays.length) setAdminRosterDate(rosterDays[0].date);
+    const day = rosterDays.find((item) => item.date === adminRosterDate);
+    if (day) setAdminRosterDraft(Object.fromEntries(rosterShiftKeys.map((key) => [key, (day.shifts?.[key] || []).join(', ')])));
+  }, [adminRosterDate, rosterDays.length]);
+  const saveAdminRosterOverride = () => {
+    if (!adminRosterDate) return;
+    setRosterDays((days) => days.map((day) => day.date === adminRosterDate ? { ...day, shifts: Object.fromEntries(rosterShiftKeys.map((key) => [key, (adminRosterDraft[key] || '').split(',').map((name) => name.trim()).filter(Boolean)])) as RosterDay['shifts'] } : day));
+    logActivity(`Admin updated roster assignments for ${adminRosterDate}`);
+  };
+  const regenerateAdminRoster = () => {
+    const first = rosterDays[0]?.date || new Date().toISOString().slice(0, 10);
+    const year = Number(first.slice(0, 4));
+    const month = Number(first.slice(5, 7)) - 1;
+    const seed = Math.floor(Date.now() / 1000) % 100000;
+    setRosterDays(generateAutoRoster(year, month, seed));
+    logActivity(`Admin regenerated roster for ${year}-${String(month + 1).padStart(2, '0')} with seed ${seed}`);
+  };
+  const [kbSearch, setKbSearch] = useState('');
+  const [kbEditingId, setKbEditingId] = useState<string | null>(null);
+  const [kbForm, setKbForm] = useState({ title: '', category: 'General', content: '' });
+  const visibleKbArticles = kbArticles.filter((article) => (article.title + ' ' + article.category + ' ' + article.content).toLowerCase().includes(kbSearch.toLowerCase()));
+  const resetKbForm = () => { setKbEditingId(null); setKbForm({ title: '', category: 'General', content: '' }); };
+  const saveKbArticle = () => {
+    if (!kbForm.title.trim() || !kbForm.content.trim()) return;
+    const now = new Date().toISOString();
+    const id = kbEditingId || 'kb-admin-' + Date.now();
+    const existing = kbArticles.find((item) => item.id === kbEditingId);
+    const article: KBArticle = { id, title: kbForm.title.trim(), category: kbForm.category.trim() || 'General', content: kbForm.content.trim(), author: 'Admin', createdAt: existing?.createdAt || now, updatedAt: now };
+    setKbArticles((items) => kbEditingId ? items.map((item) => item.id === kbEditingId ? article : item) : [article, ...items]);
+    logActivity('Admin ' + (kbEditingId ? 'updated' : 'created') + ' knowledge base article: ' + article.title);
+    resetKbForm();
+  };
+  const editKbArticle = (article: KBArticle) => { setKbEditingId(article.id); setKbForm({ title: article.title, category: article.category, content: article.content }); };
+  const deleteKbArticle = (article: KBArticle) => {
+    if (!confirm('Delete knowledge base article "' + article.title + '"?')) return;
+    setKbArticles((items) => items.filter((item) => item.id !== article.id));
+    logActivity('Admin deleted knowledge base article: ' + article.title);
+    if (kbEditingId === article.id) resetKbForm();
+  };
+  useEffect(() => {
+    const timer = window.setInterval(() => setMonitorNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   // 📈 Reports Panel State
   const [repType, setRepType] = useState<'breaks' | 'sessions' | 'tickets' | 'contacts' | 'roster'>('breaks');
@@ -314,10 +370,6 @@ export default function AdminSection({
   };
 
   const handlePushReportToGoogleSheet = async () => {
-    if (!token || !connectedSpreadsheetId) {
-      alert("⚠️ Google Spreadsheet connection is not active or OAuth token is missing. Please authorize via Google first.");
-      return;
-    }
 
     const confirmPush = confirm(`Are you sure you want to push the filtered ${repType.toUpperCase()} dataset as a dedicated sheet tab in your connected Google Spreadsheet?`);
     if (!confirmPush) return;
@@ -489,10 +541,6 @@ export default function AdminSection({
       return;
     }
 
-    if (!token || !connectedSpreadsheetId) {
-      setCreationError('⚠️ Google Sheet is not connected. Please connect via workspace Google Auth first.');
-      return;
-    }
 
     setIsSubmitting(true);
     try {
@@ -665,6 +713,27 @@ export default function AdminSection({
     }
   };
 
+  // Download a complete cloud backup, including historical records not shown on live boards.
+  const handleDownloadFullCloudBackup = async () => {
+    try {
+      const collectionNames = ['agents', 'activeBreaks', 'breaks', 'shift_logs', 'activities', 'contacts', 'tickets', 'kb_articles', 'roster_days'];
+      const entries = await Promise.all(collectionNames.map(async (name) => [name, await fetchCloudCollection(name)]));
+      const backup = { exportedAt: new Date().toISOString(), project: 'customer-portal-49149', collections: Object.fromEntries(entries) };
+      const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `customer-portal-full-backup-${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      logActivity('Admin downloaded complete Firestore cloud backup JSON');
+    } catch (err: any) {
+      alert(`Failed to download full cloud backup: ${err?.message || err}`);
+    }
+  };
+
   // Open Google Sheets portal
   const handleOpenLiveSpreadsheet = () => {
     if (connectedSpreadsheetUrl) {
@@ -726,6 +795,14 @@ export default function AdminSection({
           >
             <ExternalLink className="w-3.5 h-3.5" />
             OPEN LIVE SPREADSHEET
+          </button>
+
+          <button
+            onClick={handleDownloadFullCloudBackup}
+            className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs uppercase tracking-wider rounded-lg shadow-xs transition-all cursor-pointer"
+          >
+            <Download className="w-3.5 h-3.5" />
+            Download Full Cloud Backup (JSON)
           </button>
 
           <button
@@ -1344,6 +1421,72 @@ export default function AdminSection({
         </div>
       </div>
 
+      {/* Live workforce summary dashboard */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {[
+          { label: 'Total Sessions', value: liveAgentSessions.length, icon: Users, color: 'text-blue-500', bg: 'bg-blue-500/10' },
+          { label: 'On Duty', value: liveAgentSessions.filter((s) => s.status === 'available').length, icon: CheckCircle, color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
+          { label: 'On Break', value: liveAgentSessions.filter((s) => s.status === 'on_break').length, icon: Coffee, color: 'text-amber-500', bg: 'bg-amber-500/10' },
+          { label: 'Break Overruns', value: liveAgentSessions.filter((s) => {
+            if (s.status !== 'on_break') return false;
+            const active = liveBreaks.find((b: any) => b.agentId === (s.agentId || s.id) && b.status === 'active');
+            const started = active?.startTime || s.lastActive;
+            return isBreakOverrun(s.currentActivity, Math.max(0, Math.floor((monitorNow - new Date(started).getTime()) / 1000)));
+          }).length, icon: AlertCircle, color: 'text-red-500', bg: 'bg-red-500/10' },
+        ].map((card) => (
+          <div key={card.label} className="bg-white dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-xl p-4 flex items-center gap-3">
+            <div className={`w-9 h-9 rounded-lg ${card.bg} ${card.color} flex items-center justify-center`}><card.icon className="w-4 h-4" /></div>
+            <div><p className="text-[9px] text-zinc-400 uppercase tracking-wider font-bold">{card.label}</p><p className={`text-xl font-black font-mono ${card.color}`}>{card.value}</p></div>
+          </div>
+        ))}
+      </div>
+
+      {/* Live break monitoring board */}
+      <div className="bg-white dark:bg-zinc-900/30 border border-zinc-200 dark:border-zinc-800/80 rounded-xl p-5 space-y-3 shadow-xs">
+        <div className="flex items-center justify-between border-b border-zinc-200 dark:border-zinc-800 pb-3">
+          <div className="flex items-center gap-2"><Coffee className="w-5 h-5 text-amber-500 animate-pulse" /><div><h3 className="font-bold text-sm">Live Break Monitoring</h3><p className="text-[10px] text-zinc-500">All active breaks update in real time.</p></div></div>
+          <span className="text-[10px] font-mono font-bold text-amber-500">{liveBreaks.length} ACTIVE</span>
+        </div>
+        {liveAgentSessions.filter((s) => s.status === 'on_break').length > 0 ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            {liveAgentSessions.filter((s) => s.status === 'on_break').map((sess) => {
+              const active = liveBreaks.find((b: any) => b.agentId === (sess.agentId || sess.id) && b.status === 'active');
+              const started = active?.startTime || sess.lastActive;
+              const seconds = Math.max(0, Math.floor((monitorNow - new Date(started).getTime()) / 1000));
+              const over = isBreakOverrun(sess.currentActivity, seconds);
+              return <div key={sess.agentId || sess.id} className={`rounded-lg border p-3 ${over ? 'border-red-400 bg-red-500/10' : 'border-amber-500/30 bg-amber-500/5'}`}>
+                <div className="flex justify-between gap-2"><span className="font-bold text-xs truncate">{sess.name}</span><span className={`text-[9px] font-mono font-bold uppercase ${over ? 'text-red-500' : 'text-amber-500'}`}>{over ? 'OVERRUN' : 'ON BREAK'}</span></div>
+                <div className="flex justify-between mt-2 text-[10px] font-mono text-zinc-500"><span>{sess.currentActivity}</span><span className="font-bold">{Math.floor(seconds / 60)}m {seconds % 60}s</span></div>
+              </div>;
+            })}
+          </div>
+        ) : <div className="text-center py-5 text-xs italic text-zinc-500">No agents are currently on break.</div>}
+      </div>
+
+      {/* Knowledge Base management */}
+      <div className="bg-white dark:bg-zinc-900/30 border border-zinc-200 dark:border-zinc-800/80 rounded-xl p-5 space-y-4 shadow-xs">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-zinc-200 dark:border-zinc-800 pb-3">
+          <div><h3 className="font-bold text-sm flex items-center gap-2"><BookOpen className="w-5 h-5 text-purple-500" /> Knowledge Base Management</h3><p className="text-[10px] text-zinc-500">Add, edit, search and remove internal support articles.</p></div>
+          <div className="flex gap-2"><input value={kbSearch} onChange={(e) => setKbSearch(e.target.value)} placeholder="Search articles..." className="w-44 bg-zinc-50 dark:bg-zinc-950 border border-zinc-300 dark:border-zinc-700 rounded-lg px-3 py-2 text-xs" /><button onClick={resetKbForm} className="px-3 py-2 bg-purple-600 hover:bg-purple-700 text-white text-[10px] font-bold uppercase rounded-lg"><Plus className="w-3 h-3 inline mr-1" />New Article</button></div>
+        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <div className="lg:col-span-1 max-h-80 overflow-y-auto space-y-2 pr-1">{visibleKbArticles.map((article) => <div key={article.id} className="border border-zinc-200 dark:border-zinc-800 rounded-lg p-3"><div className="flex justify-between gap-2"><div><p className="text-xs font-bold truncate">{article.title}</p><p className="text-[9px] text-purple-500 uppercase">{article.category}</p></div><div className="flex gap-1"><button onClick={() => editKbArticle(article)} className="p-1 text-blue-500 hover:bg-blue-500/10 rounded"><Edit className="w-3 h-3" /></button><button onClick={() => deleteKbArticle(article)} className="p-1 text-red-500 hover:bg-red-500/10 rounded"><Trash2 className="w-3 h-3" /></button></div></div></div>)}</div>
+          <div className="lg:col-span-2 space-y-3"><input value={kbForm.title} onChange={(e) => setKbForm({ ...kbForm, title: e.target.value })} placeholder="Article title" className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-2 text-xs" /><input value={kbForm.category} onChange={(e) => setKbForm({ ...kbForm, category: e.target.value })} placeholder="Category" className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-2 text-xs" /><textarea value={kbForm.content} onChange={(e) => setKbForm({ ...kbForm, content: e.target.value })} placeholder="Article content / SOP..." className="w-full min-h-40 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg p-3 text-xs leading-relaxed" /><div className="flex justify-end gap-2"><button onClick={resetKbForm} className="px-3 py-2 border border-zinc-300 dark:border-zinc-700 rounded-lg text-xs">Cancel</button><button onClick={saveKbArticle} disabled={!kbForm.title.trim() || !kbForm.content.trim()} className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-lg text-xs font-bold"><Save className="w-3 h-3 inline mr-1" />{kbEditingId ? 'Update Article' : 'Save Article'}</button></div></div>
+        </div>
+      </div>
+
+      {/* Admin roster control center */}
+      <div className="bg-white dark:bg-zinc-900/30 border border-zinc-200 dark:border-zinc-800/80 rounded-xl p-5 space-y-4 shadow-xs">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-zinc-200 dark:border-zinc-800 pb-3">
+          <div><h3 className="font-bold text-sm flex items-center gap-2"><Calendar className="w-5 h-5 text-blue-500" /> Roster Control Center</h3><p className="text-[10px] text-zinc-500">Monitor and edit every date and shift. Changes are saved to Firestore automatically.</p></div>
+          <div className="flex gap-2"><select value={adminRosterDate} onChange={(e) => setAdminRosterDate(e.target.value)} className="bg-zinc-50 dark:bg-zinc-950 border border-zinc-300 dark:border-zinc-700 rounded-lg px-2 py-2 text-xs font-mono">{rosterDays.map((day) => <option key={day.date} value={day.date}>{day.date}</option>)}</select><button onClick={regenerateAdminRoster} className="px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white text-[10px] font-bold uppercase rounded-lg"><RefreshCw className="w-3 h-3 inline mr-1" />Regenerate Month</button></div>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+          {rosterShiftKeys.map((key) => <label key={key} className="space-y-1"><span className="text-[9px] font-bold uppercase tracking-wider text-zinc-500">{key.replace(/([A-Z])/g, ' $1')}</span><textarea value={adminRosterDraft[key] || ''} onChange={(e) => setAdminRosterDraft({ ...adminRosterDraft, [key]: e.target.value })} placeholder="Agent names, comma separated" className="w-full min-h-20 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg p-2 text-[10px] font-sans" /></label>)}
+        </div>
+        <div className="flex items-center justify-between gap-3"><span className="text-[10px] text-zinc-500">{rosterDays.length} roster days loaded • edits are audit logged</span><button onClick={saveAdminRosterOverride} disabled={!adminRosterDate} className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-bold uppercase rounded-lg"><Save className="w-3.5 h-3.5 inline mr-1" />Save Roster Changes</button></div>
+      </div>
+
       {/* 🚨 Unified Real-time Live Agent Monitor & Overrun Compliance */}
       <div className="bg-white dark:bg-zinc-900/30 border border-zinc-200 dark:border-zinc-800/80 rounded-xl p-5 space-y-4 shadow-xs">
         <div className="flex items-center justify-between border-b border-zinc-200 dark:border-zinc-800/80 pb-3">
@@ -1509,7 +1652,7 @@ export default function AdminSection({
               <Plus className="w-4 h-4 text-amber-500" />
               Agent Creation Engine
             </h3>
-            <p className="text-[11px] text-zinc-500">Register new staff directly onto Sheets.</p>
+            <p className="text-[11px] text-zinc-500">Register new staff with cloud access. Google Sheets sync is optional.</p>
           </div>
 
           <form onSubmit={handleCreateAgent} className="space-y-4 text-xs font-sans">
@@ -1580,7 +1723,7 @@ export default function AdminSection({
               disabled={isSubmitting}
               className="w-full bg-amber-600 hover:bg-amber-700 text-white font-bold uppercase tracking-wider py-2.5 rounded-lg transition-all shadow-sm flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
             >
-              {isSubmitting ? 'Registering & Syncing...' : 'Add Account to Directory'}
+              {isSubmitting ? 'Creating cloud account...' : 'Add Account to Directory'}
             </button>
           </form>
         </div>

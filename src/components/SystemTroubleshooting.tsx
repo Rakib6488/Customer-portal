@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import type { FormEvent } from 'react';
 import { 
   Wrench, Cpu, AlertTriangle, CheckCircle, Search, FileText, HelpCircle, 
   Activity, Terminal, ArrowRight, Copy, Plus, BookOpen, Wifi, 
@@ -381,7 +382,7 @@ export default function SystemTroubleshooting({
   };
 
   // Add custom troubleshooting SOP
-  const handleAddSOP = (e: React.FormEvent) => {
+  const handleAddSOP = (e: FormEvent) => {
     e.preventDefault();
     if (!newTitle.trim() || !newSymptom.trim() || !newSteps.trim()) {
       alert("Please fill in all required fields!");

@@ -1,6 +1,6 @@
 import { initializeApp } from 'firebase/app';
-import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, User, signInAnonymously, signOut } from 'firebase/auth';
-import { getFirestore, doc, setDoc, deleteDoc, collection, onSnapshot, query, limit, orderBy } from 'firebase/firestore';
+import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, User, Auth, signInAnonymously, signOut } from 'firebase/auth';
+import { getFirestore, doc, setDoc, deleteDoc, collection, onSnapshot, getDocs, query, limit, orderBy } from 'firebase/firestore';
 import firebaseConfig from '../firebase-applet-config.json';
 import { LiveAgentSession } from './types';
 
@@ -44,10 +44,10 @@ export const isFirebaseEnabled = missingConfigKeys.length === 0;
 export const appFirebaseConfig = mergedFirebaseConfig;
 
 const app = isFirebaseEnabled ? initializeApp(appFirebaseConfig) : null;
-export const auth = isFirebaseEnabled && app ? getAuth(app) : {
+export const auth: Auth = isFirebaseEnabled && app ? getAuth(app) : ({
   currentUser: null,
   signOut: async () => undefined,
-};
+} as unknown as Auth);
 export const db = isFirebaseEnabled && app ? getFirestore(app) : null;
 
 // Flag to indicate if we are in the middle of a sign-in flow.
@@ -287,6 +287,17 @@ export const upsertCloudRecord = async (collectionName: string, recordId: string
   }
 };
 
+export const fetchCloudCollection = async <T = Record<string, unknown>>(collectionName: string): Promise<T[]> => {
+  if (!isFirebaseEnabled || !auth.currentUser || !db) return [];
+  const path = collectionName;
+  try {
+    const snapshot = await getDocs(collection(db, collectionName));
+    return snapshot.docs.map((item) => ({ id: item.id, ...item.data() }) as T);
+  } catch (error) {
+    handleFirestoreError(error, OperationType.LIST, path);
+    return [];
+  }
+};
 export const listenToCloudCollection = <T extends Record<string, unknown>>(
   collectionName: string,
   onUpdate: (records: T[]) => void

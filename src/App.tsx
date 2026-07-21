@@ -1051,6 +1051,20 @@ export default function App() {
       ...kbArticles.map((item) => upsertCloudRecord('kb_articles', item.id, item as unknown as Record<string, unknown>)),
     ]);
   }, [cloudDataReady, contacts, tickets, kbArticles]);
+
+  useEffect(() => {
+    if (!cloudDataReady) return;
+    void Promise.all(agentCredentials.map((credential) =>
+      upsertCloudRecord('agent_credentials', credential.agentId, credential as unknown as Record<string, unknown>)
+    ));
+  }, [cloudDataReady, agentCredentials]);
+  useEffect(() => {
+    if (!isPortalLoggedIn || !user) return;
+    return listenToCloudCollection<any>('agent_credentials', (records) => {
+      if (records.length) setAgentCredentials(records as AgentCredential[]);
+    });
+  }, [isPortalLoggedIn, user]);
+
   // Roster Seed parameters
   const [currentRosterYear, setCurrentRosterYear] = useState<number>(2026);
   const [currentRosterMonth, setCurrentRosterMonth] = useState<number>(6); // July (0-indexed)
@@ -2328,6 +2342,8 @@ export default function App() {
               contacts={contacts}
               setContacts={setContacts}
               tickets={tickets}
+              kbArticles={kbArticles}
+              setKbArticles={setKbArticles}
               setTickets={setTickets}
               token={token}
               agentName={agentName}
@@ -2374,6 +2390,8 @@ export default function App() {
               contacts={contacts}
               tickets={tickets}
               rosterDays={rosterDays}
+              setRosterDays={setRosterDays}
+              generateAutoRoster={generateAutoRoster}
               liveAgentSessions={liveAgentSessions}
               liveBreaks={liveBreaks}
               logActivity={logActivity}
