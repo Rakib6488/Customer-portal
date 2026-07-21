@@ -76,12 +76,33 @@ service cloud.firestore {
       allow delete: if isSignedIn() && sessionId == request.auth.uid;
     }
 
+    match /agents/{agentId} {
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn()
+        && isValidId(agentId)
+        && isValidSession(request.resource.data)
+        && request.resource.data.id == agentId
+        && request.resource.data.agentId == agentId;
+      allow delete: if isSignedIn() && agentId == resource.data.agentId;
+    }
+
     match /breaks/{breakId} {
       allow read: if isSignedIn();
       allow create, update: if isSignedIn()
         && isValidId(breakId)
         && isValidBreak(request.resource.data)
         && request.resource.data.id == breakId;
+      allow delete: if isSignedIn();
+    }
+
+    match /activeBreaks/{agentId} {
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn()
+        && isValidId(agentId)
+        && isValidBreak(request.resource.data)
+        && request.resource.data.id == agentId
+        && request.resource.data.agentId == agentId
+        && request.resource.data.status == 'active';
       allow delete: if isSignedIn();
     }
 

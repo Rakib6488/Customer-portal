@@ -193,12 +193,13 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
 // Real-time Session helpers
 export const upsertSession = async (session: LiveAgentSession) => {
   if (!isFirebaseEnabled || !auth.currentUser || !db) return;
-  const uid = auth.currentUser.uid;
-  const path = `agent_sessions/${uid}`;
+  const agentId = session.agentId || session.id;
+  const path = `agents/${agentId}`;
   try {
-    await setDoc(doc(db, 'agent_sessions', uid), {
+    await setDoc(doc(db, 'agents', agentId), {
       ...session,
-      id: uid
+      id: agentId,
+      agentId
     });
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, path);
@@ -207,10 +208,9 @@ export const upsertSession = async (session: LiveAgentSession) => {
 
 export const deleteSession = async (agentId: string) => {
   if (!isFirebaseEnabled || !auth.currentUser || !db) return;
-  const uid = auth.currentUser.uid;
-  const path = `agent_sessions/${uid}`;
+  const path = `agents/${agentId}`;
   try {
-    await deleteDoc(doc(db, 'agent_sessions', uid));
+    await deleteDoc(doc(db, 'agents', agentId));
   } catch (error) {
     handleFirestoreError(error, OperationType.DELETE, path);
   }
@@ -222,7 +222,7 @@ export const listenToSessions = (onUpdate: (sessions: LiveAgentSession[]) => voi
     return () => undefined;
   }
 
-  const path = 'agent_sessions';
+  const path = 'agents';
   return onSnapshot(
     collection(db, path),
     (snapshot) => {
@@ -233,7 +233,7 @@ export const listenToSessions = (onUpdate: (sessions: LiveAgentSession[]) => voi
       onUpdate(sessions);
     },
     (error) => {
-      console.warn('Firestore agent_sessions subscription info (unauthenticated or offline):', error.message);
+      console.warn('Firestore agents subscription info (unauthenticated or offline):', error.message);
     }
   );
 };
@@ -244,6 +244,11 @@ export const upsertBreak = async (breakEvent: any) => {
   const path = `breaks/${breakEvent.id}`;
   try {
     await setDoc(doc(db, 'breaks', breakEvent.id), breakEvent);
+    if (breakEvent.status === 'active') {
+      await setDoc(doc(db, 'activeBreaks', breakEvent.agentId), { ...breakEvent, id: breakEvent.agentId });
+    } else {
+      await deleteDoc(doc(db, 'activeBreaks', breakEvent.agentId));
+    }
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, path);
   }
@@ -255,10 +260,9 @@ export const listenToBreaks = (onUpdate: (breaks: any[]) => void) => {
     return () => undefined;
   }
 
-  const path = 'breaks';
-  const q = query(collection(db, path), orderBy('startTime', 'desc'), limit(50));
+  const path = 'activeBreaks';
   return onSnapshot(
-    q,
+    collection(db, path),
     (snapshot) => {
       const breaksList: any[] = [];
       snapshot.forEach((doc) => {
