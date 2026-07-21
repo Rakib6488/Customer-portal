@@ -2361,7 +2361,6 @@ export default function App() {
             />
           )}
         </main>
-      </div>
 
       <AuthGatewayModal
         isOpen={isAuthGatewayOpen}
@@ -2370,10 +2369,12 @@ export default function App() {
         isDarkMode={isDarkMode}
       />
         </Suspense>
-
     </div>
   );
 }
+
+
+
 
 
 
