@@ -2342,8 +2342,6 @@ export default function App() {
               contacts={contacts}
               setContacts={setContacts}
               tickets={tickets}
-              kbArticles={kbArticles}
-              setKbArticles={setKbArticles}
               setTickets={setTickets}
               token={token}
               agentName={agentName}
@@ -2441,6 +2439,10 @@ export default function App() {
               liveBreaks={liveBreaks}
               contacts={contacts}
               tickets={tickets}
+              kbArticles={kbArticles}
+              setKbArticles={setKbArticles}
+              setRosterDays={setRosterDays}
+              generateAutoRoster={generateAutoRoster}
               rosterDays={rosterDays}
               systemLogs={systemLogs}
               logActivity={logActivity}
