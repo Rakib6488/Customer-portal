@@ -10,7 +10,7 @@ import {
   FileSpreadsheet,
   AlertCircle
 } from 'lucide-react';
-import { googleSignIn } from '../firebase';
+import { appFirebaseConfig, googleSignIn, isFirebaseEnabled } from '../firebase';
 import { User } from 'firebase/auth';
 
 interface AuthGatewayModalProps {
@@ -79,7 +79,7 @@ export default function AuthGatewayModal({
                 Workspace API Auth Gateway
               </h3>
               <p className="text-[10px] font-mono text-slate-500 dark:text-slate-400">
-                Secure Google Sheets & Docs Connection
+                Secure Google Sheets, Docs, and Firebase Connection
               </p>
             </div>
           </div>
@@ -161,7 +161,7 @@ export default function AuthGatewayModal({
             <div className="grid grid-cols-2 gap-2 text-[10px] font-mono">
               <div className="flex flex-col p-2 bg-white dark:bg-zinc-900 border border-slate-100 dark:border-zinc-850 rounded-lg">
                 <span className="text-slate-400 dark:text-zinc-500">AUTH DOMAIN</span>
-                <span className="text-slate-700 dark:text-zinc-300 truncate">glossy-intelligence-1t3g1.firebaseapp.com</span>
+                <span className="text-slate-700 dark:text-zinc-300 truncate">{appFirebaseConfig.authDomain}</span>
               </div>
               <div className="flex flex-col p-2 bg-white dark:bg-zinc-900 border border-slate-100 dark:border-zinc-850 rounded-lg">
                 <span className="text-slate-400 dark:text-zinc-500">REQUIRED SCOPES</span>
@@ -200,7 +200,7 @@ export default function AuthGatewayModal({
                           onClick={() => {
                             if (typeof window !== 'undefined') {
                               navigator.clipboard.writeText(window.location.hostname);
-                              alert('📋 Domain copied to clipboard!');
+                              alert('Domain copied to clipboard!');
                             }
                           }}
                           className="px-2 py-1 bg-slate-100 dark:bg-zinc-800 hover:bg-slate-200 text-slate-600 dark:text-zinc-300 rounded text-[9px] font-bold uppercase tracking-wider cursor-pointer transition-all border border-slate-200 dark:border-zinc-700"
@@ -218,7 +218,7 @@ export default function AuthGatewayModal({
                         Open your Firebase Console Authentication settings page:
                       </p>
                       <a
-                        href="https://console.firebase.google.com/project/glossy-intelligence-1t3g1/authentication/providers"
+                        href={`https://console.firebase.google.com/project/${appFirebaseConfig.projectId}/authentication/providers`}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="inline-flex items-center gap-1 mt-1.5 text-[10px] font-bold text-amber-600 hover:text-amber-700 dark:text-amber-400 dark:hover:text-amber-300 hover:underline"
@@ -239,7 +239,7 @@ export default function AuthGatewayModal({
                 </div>
 
                 <p className="text-[10px] text-amber-600 dark:text-amber-400 bg-amber-500/10 p-2.5 rounded-lg border border-amber-500/20 leading-relaxed font-medium">
-                  💡 <strong>Tip:</strong> If you use both the development URL and the shared URL, you should add both to your Authorized Domains list!
+                  <strong>Tip:</strong> If you use both the development URL and the shared URL, you should add both to your Authorized Domains list!
                 </p>
               </div>
             ) : (
@@ -265,13 +265,18 @@ export default function AuthGatewayModal({
           
           <button
             onClick={handleAuthorizeClick}
-            disabled={isConnecting}
+            disabled={isConnecting || !isFirebaseEnabled}
             className="flex items-center gap-2 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-750 disabled:opacity-50 text-white font-bold text-[10px] uppercase tracking-wider rounded-lg transition-all cursor-pointer shadow-sm"
           >
             {isConnecting ? (
               <>
                 <RefreshCw className="w-3.5 h-3.5 animate-spin" />
                 Connecting Google...
+              </>
+            ) : !isFirebaseEnabled ? (
+              <>
+                <AlertCircle className="w-3.5 h-3.5" />
+                Firebase Not Configured
               </>
             ) : (
               <>
@@ -286,3 +291,6 @@ export default function AuthGatewayModal({
     </div>
   );
 }
+
+
+

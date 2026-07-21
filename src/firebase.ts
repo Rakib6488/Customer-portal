@@ -1,12 +1,54 @@
 import { initializeApp } from 'firebase/app';
-import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, User, signInAnonymously } from 'firebase/auth';
+import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, User, signInAnonymously, signOut } from 'firebase/auth';
 import { getFirestore, doc, setDoc, deleteDoc, collection, onSnapshot, query, limit, orderBy } from 'firebase/firestore';
 import firebaseConfig from '../firebase-applet-config.json';
 import { LiveAgentSession } from './types';
 
-const app = initializeApp(firebaseConfig);
-export const auth = getAuth(app);
-export const db = getFirestore(app);
+type FirebaseAppConfig = {
+  apiKey: string;
+  authDomain: string;
+  projectId: string;
+  storageBucket: string;
+  messagingSenderId: string;
+  appId: string;
+  measurementId?: string;
+  oAuthClientId?: string;
+  recaptchaSiteKey?: string;
+};
+
+const mergedFirebaseConfig: FirebaseAppConfig = {
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY ?? firebaseConfig.apiKey,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN ?? firebaseConfig.authDomain,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID ?? firebaseConfig.projectId,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET ?? firebaseConfig.storageBucket,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID ?? firebaseConfig.messagingSenderId,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID ?? firebaseConfig.appId,
+  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID ?? firebaseConfig.measurementId,
+  oAuthClientId: import.meta.env.VITE_FIREBASE_OAUTH_CLIENT_ID ?? firebaseConfig.oAuthClientId,
+  recaptchaSiteKey: import.meta.env.VITE_FIREBASE_RECAPTCHA_SITE_KEY ?? firebaseConfig.recaptchaSiteKey,
+};
+
+const requiredConfigKeys: (keyof FirebaseAppConfig)[] = [
+  'apiKey',
+  'authDomain',
+  'projectId',
+  'storageBucket',
+  'messagingSenderId',
+  'appId',
+];
+
+const missingConfigKeys = requiredConfigKeys.filter((key) => !mergedFirebaseConfig[key]);
+
+export const isFirebaseEnabled = missingConfigKeys.length === 0;
+
+export const appFirebaseConfig = mergedFirebaseConfig;
+
+const app = isFirebaseEnabled ? initializeApp(appFirebaseConfig) : null;
+export const auth = isFirebaseEnabled && app ? getAuth(app) : {
+  currentUser: null,
+  signOut: async () => undefined,
+};
+export const db = isFirebaseEnabled && app ? getFirestore(app) : null;
 
 // Flag to indicate if we are in the middle of a sign-in flow.
 let isSigningIn = false;
@@ -14,9 +56,10 @@ let isSigningIn = false;
 let cachedAccessToken: string | null = null;
 
 export const signInAnonymouslyIfNeeded = async () => {
+  if (!isFirebaseEnabled) return;
   if (!auth.currentUser) {
     try {
-      await signInAnonymously(auth);
+      await signInAnonymously(auth as any);
     } catch (e) {
       console.error("Failed to sign in anonymously:", e);
     }
@@ -28,7 +71,12 @@ export const initAuth = (
   onAuthSuccess?: (user: User, token: string | null) => void,
   onAuthFailure?: () => void
 ) => {
-  return onAuthStateChanged(auth, async (user: User | null) => {
+  if (!isFirebaseEnabled) {
+    onAuthFailure?.();
+    return () => undefined;
+  }
+
+  return onAuthStateChanged(auth as any, async (user: User | null) => {
     if (user) {
       if (!cachedAccessToken) {
         try {
@@ -52,6 +100,10 @@ export const initAuth = (
 
 // Must be called from a button click or user interaction
 export const googleSignIn = async (): Promise<{ user: User; accessToken: string } | null> => {
+  if (!isFirebaseEnabled) {
+    throw new Error('Firebase is not configured for this deployment. Set the VITE_FIREBASE_* variables to enable Google sign-in.');
+  }
+
   try {
     isSigningIn = true;
     const result = await signInWithPopup(auth, provider);
@@ -91,7 +143,7 @@ export const getAccessToken = async (): Promise<string | null> => {
 };
 
 export const logout = async () => {
-  await auth.signOut();
+  await signOut(auth as any);
   cachedAccessToken = null;
   try {
     sessionStorage.removeItem('_g_w_token_');
@@ -140,7 +192,7 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
 
 // Real-time Session helpers
 export const upsertSession = async (session: LiveAgentSession) => {
-  if (!auth.currentUser) return;
+  if (!isFirebaseEnabled || !auth.currentUser || !db) return;
   const uid = auth.currentUser.uid;
   const path = `agent_sessions/${uid}`;
   try {
@@ -154,7 +206,7 @@ export const upsertSession = async (session: LiveAgentSession) => {
 };
 
 export const deleteSession = async (agentId: string) => {
-  if (!auth.currentUser) return;
+  if (!isFirebaseEnabled || !auth.currentUser || !db) return;
   const uid = auth.currentUser.uid;
   const path = `agent_sessions/${uid}`;
   try {
@@ -165,6 +217,11 @@ export const deleteSession = async (agentId: string) => {
 };
 
 export const listenToSessions = (onUpdate: (sessions: LiveAgentSession[]) => void) => {
+  if (!isFirebaseEnabled || !db) {
+    onUpdate([]);
+    return () => undefined;
+  }
+
   const path = 'agent_sessions';
   return onSnapshot(
     collection(db, path),
@@ -183,7 +240,7 @@ export const listenToSessions = (onUpdate: (sessions: LiveAgentSession[]) => voi
 
 // Real-time Breaks helpers
 export const upsertBreak = async (breakEvent: any) => {
-  if (!auth.currentUser) return;
+  if (!isFirebaseEnabled || !auth.currentUser || !db) return;
   const path = `breaks/${breakEvent.id}`;
   try {
     await setDoc(doc(db, 'breaks', breakEvent.id), breakEvent);
@@ -193,6 +250,11 @@ export const upsertBreak = async (breakEvent: any) => {
 };
 
 export const listenToBreaks = (onUpdate: (breaks: any[]) => void) => {
+  if (!isFirebaseEnabled || !db) {
+    onUpdate([]);
+    return () => undefined;
+  }
+
   const path = 'breaks';
   const q = query(collection(db, path), orderBy('startTime', 'desc'), limit(50));
   return onSnapshot(
@@ -212,7 +274,7 @@ export const listenToBreaks = (onUpdate: (breaks: any[]) => void) => {
 
 // Global spreadsheet config helpers
 export const saveSpreadsheetConfig = async (spreadsheetId: string, spreadsheetUrl: string) => {
-  if (!auth.currentUser) return;
+  if (!isFirebaseEnabled || !auth.currentUser || !db) return;
   const path = 'config/spreadsheet';
   try {
     await setDoc(doc(db, 'config', 'spreadsheet'), { spreadsheetId, spreadsheetUrl, updatedAt: new Date().toISOString() });
@@ -222,6 +284,11 @@ export const saveSpreadsheetConfig = async (spreadsheetId: string, spreadsheetUr
 };
 
 export const listenToSpreadsheetConfig = (onUpdate: (config: { spreadsheetId: string; spreadsheetUrl: string } | null) => void) => {
+  if (!isFirebaseEnabled || !db) {
+    onUpdate(null);
+    return () => undefined;
+  }
+
   const path = 'config/spreadsheet';
   return onSnapshot(
     doc(db, 'config', 'spreadsheet'),
@@ -253,7 +320,7 @@ export interface PersonalPreferences {
 }
 
 export const savePersonalPreferences = async (agentId: string, prefs: PersonalPreferences) => {
-  if (!auth.currentUser) return;
+  if (!isFirebaseEnabled || !auth.currentUser || !db) return;
   const path = `config/preferences_${agentId}`;
   try {
     await setDoc(doc(db, 'config', `preferences_${agentId}`), { ...prefs, updatedAt: new Date().toISOString() });
@@ -263,6 +330,11 @@ export const savePersonalPreferences = async (agentId: string, prefs: PersonalPr
 };
 
 export const listenToPersonalPreferences = (agentId: string, onUpdate: (prefs: PersonalPreferences | null) => void) => {
+  if (!isFirebaseEnabled || !db) {
+    onUpdate(null);
+    return () => undefined;
+  }
+
   const path = `config/preferences_${agentId}`;
   return onSnapshot(
     doc(db, 'config', `preferences_${agentId}`),
@@ -287,4 +359,8 @@ export const listenToPersonalPreferences = (agentId: string, onUpdate: (prefs: P
     }
   );
 };
+
+
+
+
 

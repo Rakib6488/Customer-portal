@@ -438,7 +438,7 @@ export default function SettingsSection({
                   {isInIframe && (
                     <div className="p-3 bg-amber-500/10 border border-amber-500/20 dark:border-amber-500/15 rounded-xl text-left space-y-2">
                       <p className="text-[10px] font-semibold text-amber-600 dark:text-amber-400 leading-normal">
-                        ⚠️ <strong>Iframe Notice:</strong> Browser security blocks authorization popups within embedded preview frames. Please open the application in a new tab to complete Google authorization.
+                        <strong>Warning:</strong> Browser security blocks authorization popups within embedded preview frames. Please open the application in a new tab to complete Google authorization.
                       </p>
                       <a
                         href={window.location.href}
@@ -564,3 +564,4 @@ export default function SettingsSection({
     </div>
   );
 }
+

@@ -1,41 +1,39 @@
+@import "tailwindcss";
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
 :root {
   /* DARK THEME (Default) - Premium Enterprise Deep Slate & Obsidian Theme */
-  --theme-bg-app: #080c14;       /* Deep obsidian midnight base */
-  --theme-bg-card: #0f172a;      /* Clean slate obsidian card background */
-  --theme-border-card: rgba(30, 41, 59, 0.7); /* Subtle border matching dark theme */
-  --theme-border-card-solid: #1e293b; /* Crisp dark slate border */
-  --theme-text-main: #f1f5f9;    /* Crisp light-gray Slate-100 text */
-  --theme-text-muted: #94a3b8;   /* Soft Slate-400 muted text */
-  --theme-text-muted-darker: #64748b; /* Slate-500 muted text */
-  --theme-bg-hover: #1e293b;     /* Soft dark highlight on hover */
-  
-  --theme-accent-gold: #6366f1;  /* Elegant Indigo-500 accent */
-  --theme-accent-gold-hover: #4f46e5; /* Elegant Indigo-600 hover */
+  --theme-bg-app: #080c14;
+  --theme-bg-card: #0f172a;
+  --theme-border-card: rgba(30, 41, 59, 0.7);
+  --theme-border-card-solid: #1e293b;
+  --theme-text-main: #f1f5f9;
+  --theme-text-muted: #94a3b8;
+  --theme-text-muted-darker: #64748b;
+  --theme-bg-hover: #1e293b;
+  --theme-accent-gold: #6366f1;
+  --theme-accent-gold-hover: #4f46e5;
 }
 
 .light {
   /* LIGHT THEME - Professional enterprise off-whites & slate base */
-  --theme-bg-app: #f8fafc;       /* Off-white background (Slate-50) */
-  --theme-bg-card: #ffffff;      /* Pure white card backgrounds */
-  --theme-border-card: #e2e8f0;  /* Soft slate-200 border */
-  --theme-border-card-solid: #cbd5e1; /* Slate-300 border */
-  --theme-text-main: #0f172a;    /* Deep Slate-900 charcoal text */
-  --theme-text-muted: #475569;   /* Slate-600 muted text */
-  --theme-text-muted-darker: #64748b; /* Slate-500 muted text */
-  --theme-bg-hover: #f1f5f9;     /* Soft Slate-100 hover highlight */
-  
-  --theme-accent-gold: #4f46e5;  /* Elegant Indigo-600 accent */
-  --theme-accent-gold-hover: #3730a3; /* Indigo-850 hover accent */
+  --theme-bg-app: #f8fafc;
+  --theme-bg-card: #ffffff;
+  --theme-border-card: #e2e8f0;
+  --theme-border-card-solid: #cbd5e1;
+  --theme-text-main: #0f172a;
+  --theme-text-muted: #475569;
+  --theme-text-muted-darker: #64748b;
+  --theme-bg-hover: #f1f5f9;
+  --theme-accent-gold: #4f46e5;
+  --theme-accent-gold-hover: #3730a3;
 }
-
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
-@import "tailwindcss";
 
 @theme {
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
   --font-serif: "Georgia", ui-serif, serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
-  
+
   --color-bg-dark: var(--theme-bg-app);
   --color-surface-dark: var(--theme-bg-card);
   --color-accent-gold: var(--theme-accent-gold);
@@ -44,25 +42,70 @@
   /* Map zinc variables dynamically so that all App.tsx components adapt seamlessly */
   --color-zinc-950: var(--theme-bg-app);
   --color-zinc-900: var(--theme-bg-card);
+  --color-zinc-885: var(--theme-bg-hover);
+  --color-zinc-855: var(--theme-bg-hover);
   --color-zinc-850: var(--theme-bg-hover);
   --color-zinc-800: var(--theme-border-card);
   --color-zinc-750: var(--theme-border-card-solid);
   --color-zinc-700: var(--theme-border-card-solid);
-  
+  --color-zinc-650: var(--theme-text-muted-darker);
   --color-zinc-600: var(--theme-text-muted-darker);
+  --color-zinc-550: var(--theme-text-muted);
   --color-zinc-500: var(--theme-text-muted);
+  --color-zinc-450: var(--theme-text-muted);
   --color-zinc-400: var(--theme-text-muted);
   --color-zinc-350: var(--theme-text-muted);
   --color-zinc-300: var(--theme-text-main);
+  --color-zinc-250: var(--theme-text-main);
   --color-zinc-200: var(--theme-text-main);
   --color-zinc-100: var(--theme-text-main);
+
+  --color-slate-850: var(--theme-bg-hover);
+  --color-slate-750: var(--theme-border-card-solid);
+  --color-slate-650: var(--theme-text-muted-darker);
+  --color-slate-550: var(--theme-text-muted);
+  --color-slate-450: var(--theme-text-muted);
+  --color-slate-350: var(--theme-text-muted);
+  --color-slate-250: var(--theme-border-card);
+
+  --color-emerald-750: #047857;
+  --color-rose-550: #e11d48;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+html {
+  color-scheme: dark;
+}
+
+.light html,
+html.light {
+  color-scheme: light;
 }
 
 body {
+  margin: 0;
   background-color: var(--theme-bg-app);
   color: var(--theme-text-main);
   font-family: var(--font-sans);
   transition: background-color 0.25s ease, color 0.25s ease, border-color 0.25s ease;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--theme-accent-gold) 25%, transparent);
+  color: var(--theme-text-main);
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
 }
 
 /* Beautiful custom scrollbars matching active theme */
@@ -70,19 +113,23 @@ body {
   width: 6px;
   height: 6px;
 }
+
 ::-webkit-scrollbar-track {
   background: var(--theme-bg-app);
 }
+
 ::-webkit-scrollbar-thumb {
   background: var(--theme-border-card-solid);
   border-radius: 4px;
 }
+
 ::-webkit-scrollbar-thumb:hover {
   background: var(--theme-text-muted-darker);
 }
 
 @keyframes flash-red {
-  0%, 100% {
+  0%,
+  100% {
     background-color: rgba(127, 29, 29, 0.25);
     border-color: rgba(239, 68, 68, 0.45);
     box-shadow: 0 0 2px rgba(239, 68, 68, 0.1);

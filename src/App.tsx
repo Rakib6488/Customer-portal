@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { lazy, Suspense, useState, useEffect, useRef } from 'react';
 import { motion } from 'motion/react';
 import {
   Clock,
@@ -39,7 +39,8 @@ import {
   saveSpreadsheetConfig,
   listenToSpreadsheetConfig,
   savePersonalPreferences,
-  listenToPersonalPreferences
+  listenToPersonalPreferences,
+  isFirebaseEnabled
 } from './firebase';
 import {
   createAndExportRosterToSheet,
@@ -51,20 +52,19 @@ import {
   fetchAgentCredentialsFromSheet
 } from './workspace';
 import { CRMContact, SupportTicket, RosterDay, AgentCredential, LiveAgentSession, KBArticle } from './types';
-import { INITIAL_CONTACTS, INITIAL_TICKETS, INITIAL_KB_ARTICLES } from './data';
 import { parsePastedRoster } from './pastedRoster';
 
 // Modular Sections
-import DashboardSection from './components/DashboardSection';
-import CrmSection from './components/CrmSection';
-import KbSection from './components/KbSection';
-import AdminSection from './components/AdminSection';
-import RosterSection from './components/RosterSection';
-import ReportsSection from './components/ReportsSection';
-import SettingsSection from './components/SettingsSection';
-import CsTicketFormSection from './components/CsTicketFormSection';
-import AuthGatewayModal from './components/AuthGatewayModal';
-import SystemTroubleshooting from './components/SystemTroubleshooting';
+const DashboardSection = lazy(() => import('./components/DashboardSection'));
+const CrmSection = lazy(() => import('./components/CrmSection'));
+const KbSection = lazy(() => import('./components/KbSection'));
+const AdminSection = lazy(() => import('./components/AdminSection'));
+const RosterSection = lazy(() => import('./components/RosterSection'));
+const ReportsSection = lazy(() => import('./components/ReportsSection'));
+const SettingsSection = lazy(() => import('./components/SettingsSection'));
+const CsTicketFormSection = lazy(() => import('./components/CsTicketFormSection'));
+const AuthGatewayModal = lazy(() => import('./components/AuthGatewayModal'));
+const SystemTroubleshooting = lazy(() => import('./components/SystemTroubleshooting'));
 
 export const AGENTS_LIST = [
   { name: "Israt Jahan Mim", isMale: false },
@@ -227,6 +227,11 @@ function AgentSelect({ value, onChange }: AgentSelectProps) {
 
 export default function App() {
   const isInIframe = typeof window !== 'undefined' && window.self !== window.top;
+  const initialDataRef = useRef<{ contacts: CRMContact[]; tickets: SupportTicket[]; kbArticles: KBArticle[] }>({
+    contacts: [],
+    tickets: [],
+    kbArticles: [],
+  });
 
   // Authentication states
   const [user, setUser] = useState<User | null>(null);
@@ -277,6 +282,8 @@ export default function App() {
     return null;
   });
 
+  const [isDataHydrated, setIsDataHydrated] = useState(false);
+
   // Agent Credentials state
   const [agentCredentials, setAgentCredentials] = useState<AgentCredential[]>(() => {
     const saved = localStorage.getItem('csp_agent_credentials');
@@ -305,6 +312,91 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('csp_agent_credentials', JSON.stringify(agentCredentials));
   }, [agentCredentials]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const hydrateData = async () => {
+      try {
+        const { INITIAL_CONTACTS, INITIAL_TICKETS, INITIAL_KB_ARTICLES } = await import('./data');
+        if (cancelled) return;
+
+        initialDataRef.current = {
+          contacts: INITIAL_CONTACTS,
+          tickets: INITIAL_TICKETS,
+          kbArticles: INITIAL_KB_ARTICLES,
+        };
+
+        const loadContacts = () => {
+          const saved = localStorage.getItem('csp_contacts');
+          if (saved) {
+            try {
+              return JSON.parse(saved) as CRMContact[];
+            } catch (e) {
+              console.error('Error parsing cached contacts', e);
+            }
+          }
+          return INITIAL_CONTACTS;
+        };
+
+        const loadTickets = () => {
+          const saved = localStorage.getItem('csp_tickets');
+          if (saved) {
+            try {
+              return JSON.parse(saved) as SupportTicket[];
+            } catch (e) {
+              console.error('Error parsing cached tickets', e);
+            }
+          }
+          return INITIAL_TICKETS;
+        };
+
+        const loadKbArticles = () => {
+          const saved = localStorage.getItem('csp_kb_articles');
+          if (saved) {
+            try {
+              let parsed: KBArticle[] = JSON.parse(saved);
+              parsed = parsed.filter(a => {
+                if (a.id.startsWith('kb-palmpay-')) return true;
+                if (/^kb-\d{10,}/.test(a.id)) return true;
+                return false;
+              });
+              parsed = parsed.map(a => {
+                if (a.id.startsWith('kb-palmpay-')) {
+                  const fresh = INITIAL_KB_ARTICLES.find(f => f.id === a.id);
+                  if (fresh) return fresh;
+                }
+                return a;
+              });
+              const parsedIds = new Set(parsed.map(a => a.id));
+              const missing = INITIAL_KB_ARTICLES.filter(a => !parsedIds.has(a.id));
+              if (missing.length > 0) {
+                return [...parsed, ...missing];
+              }
+              return parsed;
+            } catch (e) {
+              console.error('Error parsing local KB articles, resetting to defaults', e);
+            }
+          }
+          return INITIAL_KB_ARTICLES;
+        };
+
+        setContacts(loadContacts());
+        setTickets(loadTickets());
+        setKbArticles(loadKbArticles());
+      } catch (e) {
+        console.error('Failed to load initial portal data', e);
+      } finally {
+        if (!cancelled) setIsDataHydrated(true);
+      }
+    };
+
+    hydrateData();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Login form states
   const [loginRole, setLoginRole] = useState<'AGENT' | 'ADMIN'>('AGENT');
@@ -880,61 +972,26 @@ export default function App() {
   const [liveBreaks, setLiveBreaks] = useState<any[]>([]);
 
   // Local state directory mock data loading/storing
-  const [contacts, setContacts] = useState<CRMContact[]>(() => {
-    const saved = localStorage.getItem('csp_contacts');
-    return saved ? JSON.parse(saved) : INITIAL_CONTACTS;
-  });
+  const [contacts, setContacts] = useState<CRMContact[]>([]);
 
   useEffect(() => {
+    if (!isDataHydrated) return;
     localStorage.setItem('csp_contacts', JSON.stringify(contacts));
-  }, [contacts]);
+  }, [contacts, isDataHydrated]);
 
-  const [tickets, setTickets] = useState<SupportTicket[]>(() => {
-    const saved = localStorage.getItem('csp_tickets');
-    return saved ? JSON.parse(saved) : INITIAL_TICKETS;
-  });
+  const [tickets, setTickets] = useState<SupportTicket[]>([]);
 
   useEffect(() => {
+    if (!isDataHydrated) return;
     localStorage.setItem('csp_tickets', JSON.stringify(tickets));
-  }, [tickets]);
+  }, [tickets, isDataHydrated]);
 
-  const [kbArticles, setKbArticles] = useState<KBArticle[]>(() => {
-    const saved = localStorage.getItem('csp_kb_articles');
-    if (saved) {
-      try {
-        let parsed: KBArticle[] = JSON.parse(saved);
-        // Exclude old template legacy/demo articles (e.g. Acme SLA onboarding)
-        // We preserve PalmPay articles (kb-palmpay-*) and user-created custom articles (kb-[timestamp])
-        parsed = parsed.filter(a => {
-          if (a.id.startsWith('kb-palmpay-')) return true;
-          if (/^kb-\d{10,}/.test(a.id)) return true;
-          return false;
-        });
-        // Dynamically refresh PalmPay template articles to update categories/content
-        parsed = parsed.map(a => {
-          if (a.id.startsWith('kb-palmpay-')) {
-            const fresh = INITIAL_KB_ARTICLES.find(f => f.id === a.id);
-            if (fresh) return fresh;
-          }
-          return a;
-        });
-        const parsedIds = new Set(parsed.map(a => a.id));
-        const missing = INITIAL_KB_ARTICLES.filter(a => !parsedIds.has(a.id));
-        if (missing.length > 0) {
-          return [...parsed, ...missing];
-        }
-        return parsed;
-      } catch (e) {
-        console.error("Error parsing local KB articles, resetting to defaults", e);
-        return INITIAL_KB_ARTICLES;
-      }
-    }
-    return INITIAL_KB_ARTICLES;
-  });
+  const [kbArticles, setKbArticles] = useState<KBArticle[]>([]);
 
   useEffect(() => {
+    if (!isDataHydrated) return;
     localStorage.setItem('csp_kb_articles', JSON.stringify(kbArticles));
-  }, [kbArticles]);
+  }, [kbArticles, isDataHydrated]);
 
   // Roster Seed parameters
   const [currentRosterYear, setCurrentRosterYear] = useState<number>(2026);
@@ -1430,12 +1487,15 @@ export default function App() {
   };
 
   const flushPreviousLocalState = () => {
-    setTickets(INITIAL_TICKETS);
-    setContacts(INITIAL_CONTACTS);
+    const defaults = initialDataRef.current;
+    setContacts(defaults.contacts);
+    setTickets(defaults.tickets);
+    setKbArticles(defaults.kbArticles);
     setSystemLogs([]);
 
     localStorage.removeItem('csp_contacts');
     localStorage.removeItem('csp_tickets');
+    localStorage.removeItem('csp_kb_articles');
     localStorage.removeItem('csp_system_logs');
   };
 
@@ -2085,13 +2145,17 @@ export default function App() {
             <div className="flex items-center gap-2">
               <AlertCircle className="w-4 h-4 text-amber-500 shrink-0" />
               <span className="text-[11px] font-sans text-slate-650 dark:text-slate-400 font-semibold leading-normal">
-                {isInIframe ? (
+                {!isFirebaseEnabled ? (
                   <span>
-                    ⚠️ <strong>Workspace API offline.</strong> Browser security blocks Google authorization popups inside embedded preview frames. Please open this app in a new tab to authorize Sheets & Docs.
+                    <strong>Local mode active.</strong> Firebase is not configured for this deployment, so realtime sync, Google sign-in, and Firestore storage are disabled.
+                  </span>
+                ) : isInIframe ? (
+                  <span>
+                    <strong>Warning:</strong> Browser security blocks Google authorization popups inside embedded preview frames. Please open this app in a new tab to authorize Sheets & Docs.
                   </span>
                 ) : (
                   <span>
-                    ⚠️ <strong>Workspace API offline.</strong> Connect your Google Workspace Account to synchronize shift rosters, log sheets, and CRM documents.
+                    <strong>Warning:</strong> Connect your Google Workspace Account to synchronize shift rosters, log sheets, and CRM documents.
                   </span>
                 )}
               </span>
@@ -2120,7 +2184,8 @@ export default function App() {
         )}
 
         {/* Dynamic Inner Workspace Content Tab Switching Router */}
-        <main className="flex-1">
+        <Suspense fallback={<div className="flex-1 flex items-center justify-center p-8 text-sm text-zinc-500">Loading portal sections...</div>}>
+          <main className="flex-1">
           {activeTab === 'dashboard' && (
             <DashboardSection
               agentName={agentName}
@@ -2304,7 +2369,16 @@ export default function App() {
         onSuccess={handleGoogleSignInSuccess}
         isDarkMode={isDarkMode}
       />
+        </Suspense>
 
     </div>
   );
 }
+
+
+
+
+
+
+
+
