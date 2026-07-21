@@ -289,115 +289,32 @@ export default function App() {
   // Agent Credentials state
   const [agentCredentials, setAgentCredentials] = useState<AgentCredential[]>(() => {
     const saved = localStorage.getItem('csp_agent_credentials');
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch (e) {
-        console.error("Error parsing cached agent credentials", e);
-      }
-    }
-    const seed: AgentCredential[] = [
-      { agentId: 'admin', passwordHash: 'admin123', name: 'Administrator', role: 'ADMIN' }
-    ];
-    AGENTS_LIST.forEach((agent, index) => {
-      const padIndex = String(index + 1).padStart(2, '0');
-      seed.push({
-        agentId: `agent${padIndex}`,
-        passwordHash: 'agent123',
-        name: agent.name,
-        role: 'AGENT'
-      });
-    });
-    return seed;
+    if (!saved) return [];
+    try { return JSON.parse(saved) as AgentCredential[]; } catch { return []; }
   });
 
   useEffect(() => {
     localStorage.setItem('csp_agent_credentials', JSON.stringify(agentCredentials));
   }, [agentCredentials]);
 
+  // Load only user-saved local cache. Firestore listeners hydrate cloud data after authentication.
   useEffect(() => {
-    let cancelled = false;
-
-    const hydrateData = async () => {
+    const readCache = <T,>(key: string): T[] => {
       try {
-        const { INITIAL_CONTACTS, INITIAL_TICKETS, INITIAL_KB_ARTICLES } = await import('./data');
-        if (cancelled) return;
-
-        initialDataRef.current = {
-          contacts: INITIAL_CONTACTS,
-          tickets: INITIAL_TICKETS,
-          kbArticles: INITIAL_KB_ARTICLES,
-        };
-
-        const loadContacts = () => {
-          const saved = localStorage.getItem('csp_contacts');
-          if (saved) {
-            try {
-              return JSON.parse(saved) as CRMContact[];
-            } catch (e) {
-              console.error('Error parsing cached contacts', e);
-            }
-          }
-          return INITIAL_CONTACTS;
-        };
-
-        const loadTickets = () => {
-          const saved = localStorage.getItem('csp_tickets');
-          if (saved) {
-            try {
-              return JSON.parse(saved) as SupportTicket[];
-            } catch (e) {
-              console.error('Error parsing cached tickets', e);
-            }
-          }
-          return INITIAL_TICKETS;
-        };
-
-        const loadKbArticles = () => {
-          const saved = localStorage.getItem('csp_kb_articles');
-          if (saved) {
-            try {
-              let parsed: KBArticle[] = JSON.parse(saved);
-              parsed = parsed.filter(a => {
-                if (a.id.startsWith('kb-palmpay-')) return true;
-                if (/^kb-\d{10,}/.test(a.id)) return true;
-                return false;
-              });
-              parsed = parsed.map(a => {
-                if (a.id.startsWith('kb-palmpay-')) {
-                  const fresh = INITIAL_KB_ARTICLES.find(f => f.id === a.id);
-                  if (fresh) return fresh;
-                }
-                return a;
-              });
-              const parsedIds = new Set(parsed.map(a => a.id));
-              const missing = INITIAL_KB_ARTICLES.filter(a => !parsedIds.has(a.id));
-              if (missing.length > 0) {
-                return [...parsed, ...missing];
-              }
-              return parsed;
-            } catch (e) {
-              console.error('Error parsing local KB articles, resetting to defaults', e);
-            }
-          }
-          return INITIAL_KB_ARTICLES;
-        };
-
-        setContacts(loadContacts());
-        setTickets(loadTickets());
-        setKbArticles(loadKbArticles());
-      } catch (e) {
-        console.error('Failed to load initial portal data', e);
-      } finally {
-        if (!cancelled) setIsDataHydrated(true);
+        const value = localStorage.getItem(key);
+        return value ? (JSON.parse(value) as T[]) : [];
+      } catch {
+        return [];
       }
     };
-
-    hydrateData();
-
-    return () => {
-      cancelled = true;
-    };
+    const contactsCache = readCache<CRMContact>('csp_contacts');
+    const ticketsCache = readCache<SupportTicket>('csp_tickets');
+    const kbCache = readCache<KBArticle>('csp_kb_articles');
+    initialDataRef.current = { contacts: contactsCache, tickets: ticketsCache, kbArticles: kbCache };
+    setContacts(contactsCache);
+    setTickets(ticketsCache);
+    setKbArticles(kbCache);
+    setIsDataHydrated(true);
   }, []);
 
   // Login form states
@@ -1193,7 +1110,7 @@ export default function App() {
       console.error("Error parsing roster days from local storage", e);
     }
     localStorage.setItem('csp_pasted_v2_loaded', 'true');
-    return generateAutoRoster(2026, 6, 0);
+    return [];
   });
 
   useEffect(() => {
@@ -1750,7 +1667,7 @@ export default function App() {
 
                 const isValidAdmin = credential 
                   ? (credential.passwordHash === loginAdminPass && credential.role === 'ADMIN')
-                  : (loginAdminUser.trim() === 'admin' && loginAdminPass === 'admin123');
+                  : false;
 
                 if (isValidAdmin) {
                   const adminName = credential ? credential.name : 'Administrator';
@@ -1827,7 +1744,7 @@ export default function App() {
                   <input
                     type="password"
                     required
-                    placeholder="e.g. agent123"
+                    placeholder="Enter password"
                     value={loginAgentPass}
                     onChange={(e) => {
                       setLoginAgentPass(e.target.value);
@@ -1865,7 +1782,7 @@ export default function App() {
                   <input
                     type="password"
                     required
-                    placeholder="e.g. admin123"
+                    placeholder="Enter admin password"
                     value={loginAdminPass}
                     onChange={(e) => {
                       setLoginAdminPass(e.target.value);

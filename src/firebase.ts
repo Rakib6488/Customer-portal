@@ -299,6 +299,15 @@ export const fetchCloudCollection = async <T = Record<string, unknown>>(collecti
     return [];
   }
 };
+export const deleteCloudRecord = async (collectionName: string, recordId: string) => {
+  if (!isFirebaseEnabled || !auth.currentUser || !db) return;
+  const path = `${collectionName}/${recordId}`;
+  try {
+    await deleteDoc(doc(db, collectionName, recordId));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, path);
+  }
+};
 export const listenToCloudCollection = <T extends Record<string, unknown>>(
   collectionName: string,
   onUpdate: (records: T[]) => void

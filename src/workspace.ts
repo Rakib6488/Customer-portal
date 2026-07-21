@@ -712,42 +712,7 @@ export async function fetchAgentCredentialsFromSheet(
 
   // 3. If empty, seed with default values
   if (!values || values.length === 0) {
-    const defaultCredentials: string[][] = [
-      ['admin', 'admin123', 'Administrator', 'ADMIN']
-    ];
-
-    fallbackAgentsList.forEach((agent, index) => {
-      const padIndex = String(index + 1).padStart(2, '0');
-      const agentId = `agent${padIndex}`;
-      defaultCredentials.push([agentId, 'agent123', agent.name, 'AGENT']);
-    });
-
-    // Write default credentials to Sheet
-    const seedRange = `${sheetName}!A2`;
-    const seedResponse = await fetch(
-      `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${seedRange}?valueInputOption=USER_ENTERED`,
-      {
-        method: 'PUT',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          values: defaultCredentials,
-        }),
-      }
-    );
-
-    if (!seedResponse.ok) {
-      console.warn("Failed to seed default agent credentials in sheet:", await seedResponse.json());
-    }
-
-    return defaultCredentials.map(([agentId, password, name, role]) => ({
-      agentId,
-      passwordHash: password,
-      name,
-      role: role as 'AGENT' | 'ADMIN'
-    }));
+    return [];
   }
 
   // 4. Map values

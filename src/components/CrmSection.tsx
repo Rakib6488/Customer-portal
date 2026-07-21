@@ -4,6 +4,7 @@ import {
   MessageSquare, ChevronRight, FileText, CheckCircle, Clock
 } from 'lucide-react';
 import { CRMContact, SupportTicket, TicketResponse } from '../types';
+import { deleteCloudRecord } from '../firebase';
 
 interface CrmSectionProps {
   contacts: CRMContact[];
@@ -130,9 +131,12 @@ export default function CrmSection({
     setShowContactModal(false);
   };
 
-  const handleDeleteContact = (id: string, name: string) => {
+  const handleDeleteContact = async (id: string, name: string) => {
     if (confirm(`Are you sure you want to delete CRM Contact: ${name}?`)) {
+      const linkedTickets = tickets.filter(t => t.contactId === id);
+      await Promise.all([deleteCloudRecord('contacts', id), ...linkedTickets.map((ticket) => deleteCloudRecord('tickets', ticket.id))]);
       setContacts(contacts.filter(c => c.id !== id));
+      setTickets(tickets.filter(t => t.contactId !== id));
       if (selectedContact?.id === id) {
         setSelectedContact(contacts.find(c => c.id !== id) || null);
       }
@@ -195,8 +199,9 @@ export default function CrmSection({
     setShowTicketModal(false);
   };
 
-  const handleDeleteTicket = (id: string, title: string) => {
+  const handleDeleteTicket = async (id: string, title: string) => {
     if (confirm(`Are you sure you want to delete Support Ticket: ${title}?`)) {
+      await deleteCloudRecord('tickets', id);
       setTickets(tickets.filter(t => t.id !== id));
       if (selectedTicket?.id === id) {
         setSelectedTicket(tickets.find(t => t.id !== id) || null);

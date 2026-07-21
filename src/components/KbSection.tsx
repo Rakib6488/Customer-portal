@@ -4,6 +4,7 @@ import {
   Sparkles, Send, Globe, RefreshCw, AlertCircle, ExternalLink, ArrowRight
 } from 'lucide-react';
 import { KBArticle } from '../types';
+import { deleteCloudRecord } from '../firebase';
 
 interface KbSectionProps {
   kbArticles: KBArticle[];
@@ -175,12 +176,13 @@ export default function KbSection({
     setShowArticleModal(false);
   };
 
-  const handleDeleteArticle = (id: string, title: string) => {
+  const handleDeleteArticle = async (id: string, title: string) => {
     if (userRole !== 'ADMIN') {
       alert('Permission denied. Only admins can delete knowledge base articles.');
       return;
     }
     if (confirm(`Are you sure you want to delete Knowledge Base article: "${title}"?`)) {
+      await deleteCloudRecord('kb_articles', id);
       setKbArticles(kbArticles.filter(a => a.id !== id));
       if (selectedArticle?.id === id) {
         setSelectedArticle(kbArticles.find(a => a.id !== id) || null);

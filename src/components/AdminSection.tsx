@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import { AgentCredential, LiveAgentSession, CRMContact, SupportTicket, RosterDay, KBArticle } from '../types';
 import { updateAgentCredentialsInSheet, ensureSheetExists } from '../workspace';
-import { upsertSession, saveSpreadsheetConfig, fetchCloudCollection } from '../firebase';
+import { upsertSession, saveSpreadsheetConfig, fetchCloudCollection, deleteCloudRecord } from '../firebase';
 
 interface AdminSectionProps {
   token: string | null;
@@ -70,6 +70,11 @@ export default function AdminSection({
   // Local notifications (toast-like) state
   const [notifications, setNotifications] = useState<string[]>([]);
   const [monitorNow, setMonitorNow] = useState(Date.now());
+  const [activeAdminSection, setActiveAdminSection] = useState('overview');
+  const jumpToAdminSection = (section: string, target: string) => {
+    setActiveAdminSection(section);
+    document.getElementById(target)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
   const rosterShiftKeys = ['morning', 'standardDay', 'lateDay', 'afternoon', 'evening', 'night', 'off'] as const;
   const [adminRosterDate, setAdminRosterDate] = useState('');
   const [adminRosterDraft, setAdminRosterDraft] = useState<Record<string, string>>({});
@@ -107,8 +112,9 @@ export default function AdminSection({
     resetKbForm();
   };
   const editKbArticle = (article: KBArticle) => { setKbEditingId(article.id); setKbForm({ title: article.title, category: article.category, content: article.content }); };
-  const deleteKbArticle = (article: KBArticle) => {
+  const deleteKbArticle = async (article: KBArticle) => {
     if (!confirm('Delete knowledge base article "' + article.title + '"?')) return;
+    await deleteCloudRecord('kb_articles', article.id);
     setKbArticles((items) => items.filter((item) => item.id !== article.id));
     logActivity('Admin deleted knowledge base article: ' + article.title);
     if (kbEditingId === article.id) resetKbForm();
@@ -628,6 +634,7 @@ export default function AdminSection({
     }
 
     try {
+      await Promise.all([deleteCloudRecord('agent_credentials', agentId), deleteCloudRecord('agents', agentId), deleteCloudRecord('activeBreaks', agentId)]);
       const updatedList = agentCredentials.filter(c => c.agentId !== agentId);
 
       if (token && connectedSpreadsheetId) {
@@ -749,7 +756,7 @@ export default function AdminSection({
   );
 
   return (
-    <div className="p-6 space-y-6 text-left bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 animate-fadeIn font-sans">
+    <div id="admin-overview" className="p-6 space-y-6 text-left bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 animate-fadeIn font-sans">
       
       {/* Persistent browser toast notifications for Admin */}
       {notifications.length > 0 && (
@@ -816,6 +823,12 @@ export default function AdminSection({
       </div>
 
       {/* 📊 Google Sheets Connection Configuration */}
+      <div className="sticky top-2 z-20 bg-zinc-50/95 dark:bg-zinc-950/95 backdrop-blur border border-zinc-200 dark:border-zinc-800 rounded-xl p-2 shadow-lg">
+        <div className="flex flex-wrap gap-1">
+          {[['overview', 'Overview', 'admin-overview'], ['reports', 'Reports', 'admin-reports'], ['live', 'Live Monitoring', 'admin-live'], ['roster', 'Roster', 'admin-roster'], ['kb', 'Knowledge Base', 'admin-kb'], ['access', 'Access Management', 'admin-access'], ['data', 'Data & Logs', 'admin-data']].map(([key, label, target]) => <button key={key} onClick={() => jumpToAdminSection(key, target)} className={`px-3 py-2 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all ${activeAdminSection === key ? 'bg-amber-600 text-white' : 'text-zinc-500 hover:bg-zinc-200 dark:hover:bg-zinc-800'}`}>{label}</button>)}
+        </div>
+      </div>
+
       <div className="bg-white dark:bg-zinc-900/30 border border-zinc-200 dark:border-zinc-800/80 rounded-xl p-5 space-y-4 shadow-xs text-left">
         <div className="flex items-center gap-2 border-b border-zinc-200 dark:border-zinc-800/80 pb-3">
           <FileSpreadsheet className="w-5 h-5 text-emerald-500" />
@@ -900,7 +913,7 @@ export default function AdminSection({
       </div>
 
       {/* 📈 Workforce & Operational Audit Reports Engine */}
-      <div className="bg-white dark:bg-zinc-900/30 border border-zinc-200 dark:border-zinc-800/80 rounded-xl p-5 space-y-5 shadow-xs">
+      <div id="admin-reports" className="bg-white dark:bg-zinc-900/30 border border-zinc-200 dark:border-zinc-800/80 rounded-xl p-5 space-y-5 shadow-xs">
         <div className="border-b border-zinc-200 dark:border-zinc-800/85 pb-3">
           <h3 className="font-bold text-zinc-850 dark:text-zinc-100 text-sm flex items-center gap-1.5 font-sans">
             <FileText className="w-5 h-5 text-amber-500" />
@@ -1422,7 +1435,7 @@ export default function AdminSection({
       </div>
 
       {/* Live workforce summary dashboard */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <div id="admin-live" className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {[
           { label: 'Total Sessions', value: liveAgentSessions.length, icon: Users, color: 'text-blue-500', bg: 'bg-blue-500/10' },
           { label: 'On Duty', value: liveAgentSessions.filter((s) => s.status === 'available').length, icon: CheckCircle, color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
@@ -1464,7 +1477,7 @@ export default function AdminSection({
       </div>
 
       {/* Knowledge Base management */}
-      <div className="bg-white dark:bg-zinc-900/30 border border-zinc-200 dark:border-zinc-800/80 rounded-xl p-5 space-y-4 shadow-xs">
+      <div id="admin-kb" className="bg-white dark:bg-zinc-900/30 border border-zinc-200 dark:border-zinc-800/80 rounded-xl p-5 space-y-4 shadow-xs">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-zinc-200 dark:border-zinc-800 pb-3">
           <div><h3 className="font-bold text-sm flex items-center gap-2"><BookOpen className="w-5 h-5 text-purple-500" /> Knowledge Base Management</h3><p className="text-[10px] text-zinc-500">Add, edit, search and remove internal support articles.</p></div>
           <div className="flex gap-2"><input value={kbSearch} onChange={(e) => setKbSearch(e.target.value)} placeholder="Search articles..." className="w-44 bg-zinc-50 dark:bg-zinc-950 border border-zinc-300 dark:border-zinc-700 rounded-lg px-3 py-2 text-xs" /><button onClick={resetKbForm} className="px-3 py-2 bg-purple-600 hover:bg-purple-700 text-white text-[10px] font-bold uppercase rounded-lg"><Plus className="w-3 h-3 inline mr-1" />New Article</button></div>
@@ -1476,7 +1489,7 @@ export default function AdminSection({
       </div>
 
       {/* Admin roster control center */}
-      <div className="bg-white dark:bg-zinc-900/30 border border-zinc-200 dark:border-zinc-800/80 rounded-xl p-5 space-y-4 shadow-xs">
+      <div id="admin-roster" className="bg-white dark:bg-zinc-900/30 border border-zinc-200 dark:border-zinc-800/80 rounded-xl p-5 space-y-4 shadow-xs">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-zinc-200 dark:border-zinc-800 pb-3">
           <div><h3 className="font-bold text-sm flex items-center gap-2"><Calendar className="w-5 h-5 text-blue-500" /> Roster Control Center</h3><p className="text-[10px] text-zinc-500">Monitor and edit every date and shift. Changes are saved to Firestore automatically.</p></div>
           <div className="flex gap-2"><select value={adminRosterDate} onChange={(e) => setAdminRosterDate(e.target.value)} className="bg-zinc-50 dark:bg-zinc-950 border border-zinc-300 dark:border-zinc-700 rounded-lg px-2 py-2 text-xs font-mono">{rosterDays.map((day) => <option key={day.date} value={day.date}>{day.date}</option>)}</select><button onClick={regenerateAdminRoster} className="px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white text-[10px] font-bold uppercase rounded-lg"><RefreshCw className="w-3 h-3 inline mr-1" />Regenerate Month</button></div>
@@ -1578,7 +1591,7 @@ export default function AdminSection({
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         {/* AGENT DIRECTORY & CREATION ENGINE (col-span-8) */}
-        <div className="lg:col-span-8 bg-white dark:bg-zinc-900/30 border border-zinc-200 dark:border-zinc-800/80 rounded-xl p-5 space-y-4 shadow-xs">
+        <div id="admin-access" className="lg:col-span-8 bg-white dark:bg-zinc-900/30 border border-zinc-200 dark:border-zinc-800/80 rounded-xl p-5 space-y-4 shadow-xs">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-zinc-200 dark:border-zinc-800/80 pb-3">
             <div>
               <h3 className="font-bold text-zinc-850 dark:text-zinc-100 text-sm">Credentials & Personnel Directory</h3>
@@ -1675,7 +1688,7 @@ export default function AdminSection({
               <input
                 type="text"
                 required
-                placeholder="e.g. agent46"
+                placeholder="Enter agent ID"
                 value={newAgentId}
                 onChange={(e) => setNewAgentId(e.target.value.toLowerCase().trim())}
                 className="w-full bg-zinc-100 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-2 focus:outline-none focus:border-amber-500 text-zinc-850 dark:text-zinc-100"
@@ -1687,7 +1700,7 @@ export default function AdminSection({
               <input
                 type="text"
                 required
-                placeholder="e.g. Sabbir Ahmed"
+                placeholder="Enter full name"
                 value={newAgentName}
                 onChange={(e) => setNewAgentName(e.target.value)}
                 className="w-full bg-zinc-100 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-2 focus:outline-none focus:border-amber-500 text-zinc-850 dark:text-zinc-100"
@@ -1699,7 +1712,7 @@ export default function AdminSection({
               <input
                 type="text"
                 required
-                placeholder="e.g. agent123"
+                placeholder="Enter password"
                 value={newAgentPass}
                 onChange={(e) => setNewAgentPass(e.target.value)}
                 className="w-full bg-zinc-100 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-2 focus:outline-none focus:border-amber-500 text-zinc-850 dark:text-zinc-100 font-mono"
@@ -1730,7 +1743,7 @@ export default function AdminSection({
       </div>
 
       {/* AUDIT & ACTIVITY LOGS */}
-      <div className="bg-white dark:bg-zinc-900/30 border border-zinc-200 dark:border-zinc-800/80 rounded-xl p-5 space-y-4 shadow-xs">
+      <div id="admin-data" className="bg-white dark:bg-zinc-900/30 border border-zinc-200 dark:border-zinc-800/80 rounded-xl p-5 space-y-4 shadow-xs">
         <div className="flex items-center gap-2 border-b border-zinc-200 dark:border-zinc-800/80 pb-3">
           <Scroll className="w-5 h-5 text-amber-500" />
           <div>
