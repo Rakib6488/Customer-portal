@@ -1730,7 +1730,11 @@ export default function App() {
                 localStorage.setItem('csp_login_time', new Date().toISOString());
                 setUserRole('AGENT');
                 localStorage.setItem('csp_user_role', 'AGENT');
-                await signInAnonymouslyIfNeeded();
+                const firebaseReady = await signInAnonymouslyIfNeeded();
+                if (!firebaseReady) {
+                  setLoginError('Firebase authentication is unavailable. Enable Authentication → Sign-in method → Anonymous, then try again.');
+                  return;
+                }
                 setIsPortalLoggedIn(true);
                 localStorage.setItem('csp_portal_logged_in', 'true');
                 setCurrentUser({
@@ -1756,7 +1760,11 @@ export default function App() {
                   localStorage.setItem('csp_login_time', new Date().toISOString());
                   setUserRole('ADMIN');
                   localStorage.setItem('csp_user_role', 'ADMIN');
-                  await signInAnonymouslyIfNeeded();
+                  const firebaseReady = await signInAnonymouslyIfNeeded();
+                  if (!firebaseReady) {
+                    setLoginError('Firebase authentication is unavailable. Enable Authentication → Sign-in method → Anonymous, then try again.');
+                    return;
+                  }
                   setIsPortalLoggedIn(true);
                   localStorage.setItem('csp_portal_logged_in', 'true');
                   setCurrentUser({

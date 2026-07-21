@@ -55,14 +55,15 @@ let isSigningIn = false;
 // Cache the access token in memory.
 let cachedAccessToken: string | null = null;
 
-export const signInAnonymouslyIfNeeded = async () => {
-  if (!isFirebaseEnabled) return;
-  if (!auth.currentUser) {
-    try {
-      await signInAnonymously(auth as any);
-    } catch (e) {
-      console.error("Failed to sign in anonymously:", e);
-    }
+export const signInAnonymouslyIfNeeded = async (): Promise<boolean> => {
+  if (!isFirebaseEnabled) return false;
+  if (auth.currentUser) return true;
+  try {
+    await signInAnonymously(auth);
+    return Boolean(auth.currentUser);
+  } catch (e) {
+    console.error("Failed to sign in anonymously:", e);
+    return false;
   }
 };
 
