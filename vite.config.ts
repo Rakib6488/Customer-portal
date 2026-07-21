@@ -16,11 +16,11 @@ export default defineConfig(() => {
         output: {
           manualChunks(id) {
             if (!id.includes('node_modules')) return;
-            if (id.includes('react-dom') || id.includes('react/jsx-runtime') || id.includes('react')) return 'react-vendor';
             if (id.includes('firebase')) return 'firebase-vendor';
             if (id.includes('recharts')) return 'charts-vendor';
             if (id.includes('lucide-react')) return 'icons-vendor';
-            if (id.includes('motion')) return 'motion-vendor';
+            if (id.includes('motion') || id.includes('framer-motion')) return 'motion-vendor';
+            if (id.includes('node_modules/react-dom/') || id.includes('node_modules/react/') || id.includes('react/jsx-runtime') || id.includes('react/jsx-dev-runtime')) return 'react-vendor';
             if (id.includes('@google/genai')) return 'genai-vendor';
             return 'vendor';
           },
@@ -36,3 +36,4 @@ export default defineConfig(() => {
     },
   };
 });
+
