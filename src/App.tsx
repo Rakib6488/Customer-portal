@@ -23,6 +23,7 @@ import {
   Settings,
   ExternalLink,
   ClipboardList
+  ,KeyRound
 } from 'lucide-react';
 import { User } from 'firebase/auth';
 import { 
@@ -357,7 +358,7 @@ export default function App() {
   });
 
   // Active navigation tab
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'tickets' | 'cs_ticket_form' | 'crm' | 'reports' | 'kb' | 'roster' | 'system_troubleshooting' | 'admin_portal' | 'settings'>(() => {
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'tickets' | 'cs_ticket_form' | 'crm' | 'reports' | 'kb' | 'roster' | 'system_troubleshooting' | 'admin_portal' | 'agent_access' | 'settings'>(() => {
     const saved = localStorage.getItem('csp_active_tab');
     if (saved) return saved as any;
     return 'dashboard';
@@ -1904,7 +1905,7 @@ export default function App() {
               { id: 'kb', label: 'Knowledge Base', icon: BookOpen, badge: kbArticles.length },
               { id: 'roster', label: 'ALL-DAY ROSTER', icon: Calendar, badge: '24/7' },
               { id: 'settings', label: 'Settings', icon: Settings },
-              ...(userRole === 'ADMIN' ? [{ id: 'admin_portal', label: 'Admin Control Center', icon: ShieldCheck, isRed: true }] : [])
+              ...(userRole === 'ADMIN' ? [{ id: 'agent_access', label: 'Agent ID & Password', icon: KeyRound }, { id: 'admin_portal', label: 'Admin Control Center', icon: ShieldCheck, isRed: true }] : [])
             ].map((item) => {
               const Icon = item.icon;
               const isActive = activeTab === item.id;
@@ -2004,7 +2005,7 @@ export default function App() {
                 { id: 'kb', label: 'Knowledge Base', icon: BookOpen, badge: kbArticles.length },
                 { id: 'roster', label: 'ALL-DAY ROSTER', icon: Calendar, badge: '24/7' },
                 { id: 'settings', label: 'Settings', icon: Settings },
-                ...(userRole === 'ADMIN' ? [{ id: 'admin_portal', label: 'Admin Control Center', icon: ShieldCheck, isRed: true }] : [])
+                ...(userRole === 'ADMIN' ? [{ id: 'agent_access', label: 'Agent ID & Password', icon: KeyRound }, { id: 'admin_portal', label: 'Admin Control Center', icon: ShieldCheck, isRed: true }] : [])
               ].map((item) => {
                 const Icon = item.icon;
                 const isActive = activeTab === item.id;
@@ -2408,7 +2409,7 @@ export default function App() {
             />
           )}
 
-          {activeTab === 'admin_portal' && userRole === 'ADMIN' && (
+          {(activeTab === 'admin_portal' || activeTab === 'agent_access') && userRole === 'ADMIN' && (
             <AdminSection
               token={token}
               connectedSpreadsheetId={connectedSpreadsheetId}
@@ -2431,6 +2432,7 @@ export default function App() {
               logActivity={logActivity}
               isBreakOverrun={isBreakOverrun}
               getBreakLimitMinutes={getBreakLimitMinutes}
+              initialSection={activeTab === 'agent_access' ? 'access' : undefined}
             />
           )}
 

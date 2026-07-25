@@ -31,6 +31,7 @@ interface AdminSectionProps {
   logActivity: (message: string) => void;
   isBreakOverrun: (breakType: string, durationSeconds: number) => boolean;
   getBreakLimitMinutes: (breakType: string) => number;
+  initialSection?: string;
 }
 
 export default function AdminSection({
@@ -54,7 +55,8 @@ export default function AdminSection({
   systemLogs = [],
   logActivity,
   isBreakOverrun,
-  getBreakLimitMinutes
+  getBreakLimitMinutes,
+  initialSection
 }: AdminSectionProps) {
   // Agent creation form states
   const [newAgentId, setNewAgentId] = useState('');
@@ -72,6 +74,12 @@ export default function AdminSection({
   const [notifications, setNotifications] = useState<string[]>([]);
   const [monitorNow, setMonitorNow] = useState(Date.now());
   const [activeAdminSection, setActiveAdminSection] = useState('overview');
+  useEffect(() => {
+    if (!initialSection) return;
+    setActiveAdminSection(initialSection);
+    const target = window.setTimeout(() => document.getElementById('admin-' + initialSection)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 0);
+    return () => window.clearTimeout(target);
+  }, [initialSection]);
   const jumpToAdminSection = (section: string, target: string) => {
     setActiveAdminSection(section);
     document.getElementById(target)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
