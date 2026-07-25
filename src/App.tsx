@@ -1722,7 +1722,7 @@ export default function App() {
                     name: adminName,
                     role: 'ADMIN'
                   });
-                  setActiveTab('admin_portal');
+                  setActiveTab('dashboard');
                 } else {
                   setLoginError('Invalid Administrator credentials.');
                 }
@@ -1904,7 +1904,7 @@ export default function App() {
               { id: 'kb', label: 'Knowledge Base', icon: BookOpen, badge: kbArticles.length },
               { id: 'roster', label: 'ALL-DAY ROSTER', icon: Calendar, badge: '24/7' },
               { id: 'settings', label: 'Settings', icon: Settings },
-              ...(userRole === 'ADMIN' ? [{ id: 'admin_portal', label: 'Admin Portal', icon: ShieldCheck, isRed: true }] : [])
+              ...(userRole === 'ADMIN' ? [{ id: 'admin_portal', label: 'Admin Control Center', icon: ShieldCheck, isRed: true }] : [])
             ].map((item) => {
               const Icon = item.icon;
               const isActive = activeTab === item.id;
@@ -2004,7 +2004,7 @@ export default function App() {
                 { id: 'kb', label: 'Knowledge Base', icon: BookOpen, badge: kbArticles.length },
                 { id: 'roster', label: 'ALL-DAY ROSTER', icon: Calendar, badge: '24/7' },
                 { id: 'settings', label: 'Settings', icon: Settings },
-                ...(userRole === 'ADMIN' ? [{ id: 'admin_portal', label: 'Admin Portal', icon: ShieldCheck, isRed: true }] : [])
+                ...(userRole === 'ADMIN' ? [{ id: 'admin_portal', label: 'Admin Control Center', icon: ShieldCheck, isRed: true }] : [])
               ].map((item) => {
                 const Icon = item.icon;
                 const isActive = activeTab === item.id;
@@ -2252,7 +2252,32 @@ export default function App() {
         {/* Dynamic Inner Workspace Content Tab Switching Router */}
         <Suspense fallback={<div className="flex-1 flex items-center justify-center p-8 text-sm text-zinc-500">Loading portal sections...</div>}>
           <main className="flex-1">
-          {activeTab === 'dashboard' && (
+          {activeTab === 'dashboard' && userRole === 'ADMIN' && (
+            <AdminSection
+              token={token}
+              connectedSpreadsheetId={connectedSpreadsheetId}
+              connectedSpreadsheetUrl={connectedSpreadsheetUrl}
+              setConnectedSpreadsheetId={setConnectedSpreadsheetId}
+              setConnectedSpreadsheetUrl={setConnectedSpreadsheetUrl}
+              agentCredentials={agentCredentials}
+              setAgentCredentials={setAgentCredentials}
+              liveAgentSessions={liveAgentSessions}
+              setLiveAgentSessions={setLiveAgentSessions}
+              liveBreaks={liveBreaks}
+              contacts={contacts}
+              tickets={tickets}
+              kbArticles={kbArticles}
+              setKbArticles={setKbArticles}
+              setRosterDays={setRosterDays}
+              generateAutoRoster={generateAutoRoster}
+              rosterDays={rosterDays}
+              systemLogs={systemLogs}
+              logActivity={logActivity}
+              isBreakOverrun={isBreakOverrun}
+              getBreakLimitMinutes={getBreakLimitMinutes}
+            />
+          )}
+          {activeTab === 'dashboard' && userRole !== 'ADMIN' && (
             <DashboardSection
               agentName={agentName}
               agentId={currentUser?.id || 'agent01'}
