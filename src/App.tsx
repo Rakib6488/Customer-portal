@@ -289,10 +289,14 @@ export default function App() {
   // Agent Credentials state
   const [agentCredentials, setAgentCredentials] = useState<AgentCredential[]>(() => {
     const saved = localStorage.getItem('csp_agent_credentials');
+    const defaultAdmin: AgentCredential = { agentId: 'admin', passwordHash: 'admin123', name: 'Administrator', role: 'ADMIN' };
     if (saved) {
       try {
         const cached = JSON.parse(saved) as AgentCredential[];
-        if (Array.isArray(cached) && cached.length > 0) return cached;
+        if (Array.isArray(cached) && cached.length > 0) {
+          const hasAdmin = cached.some((credential) => credential.agentId.toLowerCase().trim() === 'admin');
+          return hasAdmin ? cached : [defaultAdmin, ...cached];
+        }
       } catch (error) {
         console.error('Error parsing cached agent credentials', error);
       }
@@ -301,7 +305,7 @@ export default function App() {
     // Keep the first login usable on a new/shared browser. Credentials created
     // by an administrator are still preferred whenever a local cache exists.
     const seed: AgentCredential[] = [
-      { agentId: 'admin', passwordHash: 'admin123', name: 'Administrator', role: 'ADMIN' }
+      defaultAdmin
     ];
     AGENTS_LIST.forEach((agent, index) => {
       const padIndex = String(index + 1).padStart(2, '0');
