@@ -1663,6 +1663,11 @@ export default function App() {
                   return;
                 }
 
+                if (credential.status && credential.status !== 'ACTIVE') {
+                  setLoginError(`This account is ${credential.status === 'ON_LEAVE' ? 'currently on leave' : 'suspended'}. Contact an administrator.`);
+                  return;
+                }
+
                 setAgentName(credential.name);
                 localStorage.setItem('csp_agent_name', credential.name);
                 localStorage.setItem('csp_logged_in_agent_id', credential.agentId);

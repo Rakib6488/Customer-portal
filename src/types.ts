@@ -88,6 +88,14 @@ export interface AgentCredential {
   passwordHash: string; // Plaintext as Password per requirements
   name: string;
   role: 'AGENT' | 'ADMIN';
+  status?: 'ACTIVE' | 'SUSPENDED' | 'ON_LEAVE';
+  tier?: 'TIER_1' | 'TIER_2' | 'TEAM_LEAD';
+  department?: string;
+  shift?: string;
+  queues?: string[];
+  permissions?: string[];
+  createdAt?: string;
+  lastActiveAt?: string;
 }
 
 export interface LiveAgentSession {
@@ -101,4 +109,3 @@ export interface LiveAgentSession {
   shiftTimer?: number;
   breakTimer?: number;
 }
-

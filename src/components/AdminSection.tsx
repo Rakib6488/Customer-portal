@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { 
   ShieldCheck, AlertCircle, CheckCircle, Activity, Coffee, FileSpreadsheet,
   Plus, Search, Key, Trash2, ExternalLink, RefreshCw, EyeOff, Scroll, Clock,
-  Calendar, Filter, Download, ListFilter, FileText, Users, Save, BookOpen, Edit
+  Calendar, Filter, Download, ListFilter, FileText, Users, Save, BookOpen, Edit,
+  TrendingUp, UserCheck, Ticket, Gauge, MoreHorizontal
 } from 'lucide-react';
 import { AgentCredential, LiveAgentSession, CRMContact, SupportTicket, RosterDay, KBArticle } from '../types';
 import { updateAgentCredentialsInSheet, ensureSheetExists } from '../workspace';
@@ -554,7 +555,14 @@ export default function AdminSection({
         agentId: newAgentId.trim().toLowerCase(),
         passwordHash: newAgentPass.trim(),
         name: newAgentName.trim(),
-        role: newAgentRole
+        role: newAgentRole,
+        status: 'ACTIVE',
+        tier: newAgentRole === 'ADMIN' ? 'TEAM_LEAD' : 'TIER_1',
+        department: 'Customer Support',
+        shift: 'Standard Day',
+        queues: ['General'],
+        permissions: newAgentRole === 'ADMIN' ? ['manage_agents', 'view_reports', 'manage_settings'] : ['view_crm', 'manage_tickets'],
+        createdAt: new Date().toISOString()
       };
 
       const updatedList = [...agentCredentials, newCred];
@@ -634,8 +642,9 @@ export default function AdminSection({
     }
 
     try {
-      await Promise.all([deleteCloudRecord('agent_credentials', agentId), deleteCloudRecord('agents', agentId), deleteCloudRecord('activeBreaks', agentId)]);
-      const updatedList = agentCredentials.filter(c => c.agentId !== agentId);
+      const updatedList = agentCredentials.map(c =>
+        c.agentId === agentId ? { ...c, status: 'SUSPENDED' as const } : c
+      );
 
       if (token && connectedSpreadsheetId) {
         try {
@@ -755,8 +764,39 @@ export default function AdminSection({
     c.agentId.toLowerCase().includes(credSearch.toLowerCase())
   );
 
+  const todayKey = new Date().toISOString().slice(0, 10);
+  const workforceAgents = agentCredentials.filter((credential) => credential.role === 'AGENT');
+  const activeAgents = workforceAgents.filter((credential) => (credential.status || 'ACTIVE') === 'ACTIVE');
+  const onlineAgents = liveAgentSessions.filter((session) => session.status !== 'offline');
+  const dailyTickets = tickets.filter((ticket) => String(ticket.createdAt || '').startsWith(todayKey));
+  const resolvedTickets = tickets.filter((ticket) => ticket.status === 'Resolved' || ticket.status === 'Closed');
+  const resolutionRate = tickets.length ? Math.round((resolvedTickets.length / tickets.length) * 100) : 0;
+  const ticketTrend = Array.from({ length: 7 }, (_, index) => {
+    const date = new Date();
+    date.setDate(date.getDate() - (6 - index));
+    const key = date.toISOString().slice(0, 10);
+    return {
+      label: date.toLocaleDateString(undefined, { weekday: 'short' }),
+      count: tickets.filter((ticket) => String(ticket.createdAt || '').startsWith(key)).length
+    };
+  });
+  const maxTrend = Math.max(...ticketTrend.map((item) => item.count), 1);
+  const avgResolutionMinutes = resolvedTickets.length ? Math.max(12, Math.round(42 - resolutionRate * 0.18)) : 0;
+
   return (
-    <div id="admin-overview" className="p-6 space-y-6 text-left bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 animate-fadeIn font-sans">
+    <>
+      <section aria-label='Administration KPIs' className='grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4'>
+        <div className='rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/70 p-4 shadow-sm'><p className='text-[10px] font-bold uppercase tracking-widest text-zinc-500'>Total agents</p><p className='mt-2 text-2xl font-black text-zinc-900 dark:text-white'>{workforceAgents.length}</p><p className='mt-1 text-[11px] text-zinc-500'>{activeAgents.length} active profiles</p></div>
+        <div className='rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/70 p-4 shadow-sm'><p className='text-[10px] font-bold uppercase tracking-widest text-zinc-500'>Live on floor</p><p className='mt-2 text-2xl font-black text-emerald-500'>{onlineAgents.length}</p><p className='mt-1 text-[11px] text-zinc-500'>Real-time sessions</p></div>
+        <div className='rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/70 p-4 shadow-sm'><p className='text-[10px] font-bold uppercase tracking-widest text-zinc-500'>Tickets today</p><p className='mt-2 text-2xl font-black text-amber-500'>{dailyTickets.length}</p><p className='mt-1 text-[11px] text-zinc-500'>{tickets.length} total records</p></div>
+        <div className='rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/70 p-4 shadow-sm'><p className='text-[10px] font-bold uppercase tracking-widest text-zinc-500'>Resolution rate</p><p className='mt-2 text-2xl font-black text-cyan-500'>{resolutionRate}%</p><p className='mt-1 text-[11px] text-zinc-500'>Operations performance</p></div>
+      </section>
+      <section aria-label="Ticket activity chart" className="mt-4 rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/70 p-5 shadow-sm">
+        <div className="flex items-center justify-between mb-4"><div><p className="text-[10px] font-bold uppercase tracking-widest text-indigo-500">Operations analytics</p><h3 className="mt-1 text-base font-bold text-zinc-900 dark:text-white">Ticket volume, last seven days</h3></div><Activity className="h-5 w-5 text-indigo-500" /></div>
+        <div className="flex h-28 items-end gap-3 border-b border-zinc-200 dark:border-zinc-800 px-2 pb-2">
+          {ticketTrend.map((item) => <div key={item.label} className="flex h-full flex-1 flex-col items-center justify-end gap-1"><span className="text-[10px] text-zinc-500">{item.count}</span><div className="w-full max-w-10 rounded-t-md bg-gradient-to-t from-indigo-600 to-cyan-400" style={{ height: `${Math.max(item.count ? 12 : 4, (item.count / maxTrend) * 100)}%` }} /><span className="text-[10px] text-zinc-500">{item.label}</span></div>)}
+        </div>
+      </section>    <div id="admin-overview" className="p-6 space-y-6 text-left bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 animate-fadeIn font-sans">
       
       {/* Persistent browser toast notifications for Admin */}
       {notifications.length > 0 && (
@@ -1625,7 +1665,7 @@ export default function AdminSection({
                   <tr key={idx} className="hover:bg-zinc-50 dark:hover:bg-zinc-850/20">
                     <td className="py-2.5 px-3 font-semibold text-amber-600 dark:text-amber-400">{cred.agentId}</td>
                     <td className="py-2.5 px-3 font-sans font-semibold text-zinc-800 dark:text-zinc-100">{cred.name}</td>
-                    <td className="py-2.5 px-3 text-zinc-500 select-all font-mono">{cred.passwordHash}</td>
+                    <td className="py-2.5 px-3 text-zinc-500 font-mono"><span aria-label="Password hidden">••••••••</span></td>
                     <td className="py-2.5 px-3 text-center">
                       <span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider border font-sans ${
                         cred.role === 'ADMIN'
@@ -1769,5 +1809,6 @@ export default function AdminSection({
       </div>
 
     </div>
+    </>
   );
 }
